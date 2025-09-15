@@ -1,0 +1,73 @@
+/* style.css */
+
+/* Estilos generales del body */
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background: #f0f0f0;
+    flex-direction: column;
+    font-family: sans-serif;
+    margin: 0;
+}
+
+/* Contenedor del video */
+#videoContainer {
+    width: 30%;             /* Para desktop */
+    max-width: 300px;       /* Tamaño máximo */
+    aspect-ratio: 1 / 1;    /* Mantener cuadrado */
+    border: 3px solid #333;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+}
+
+/* Video dentro del contenedor */
+video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* Botón toggle */
+button {
+    margin-top: 20px;
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+/* Media Queries para tablets */
+@media (max-width: 1024px) {
+    #videoContainer {
+        width: 40%;
+        max-width: 350px;
+    }
+}
+
+/* Media Queries para móviles */
+@media (max-width: 768px) {
+    #videoContainer {
+        width: 60%;
+        max-width: 300px;
+    }
+
+    button {
+        font-size: 14px;
+        padding: 8px 16px;
+    }
+}
+
+@media (max-width: 480px) {
+    #videoContainer {
+        width: 80%;
+        max-width: 250px;
+    }
+
+    button {
+        font-size: 12px;
+        padding: 6px 12px;
+    }
+}
