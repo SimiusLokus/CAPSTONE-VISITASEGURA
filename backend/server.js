@@ -4,12 +4,43 @@ const path = require("path");
 const sqlite3 = require("sqlite3").verbose();
 const selfsigned = require("selfsigned");
 const https = require("https");
+const os = require("os");
 
 const app = express();
 const PORT = 3001;
 
-// Middleware
-app.use(cors());
+// Función para obtener IP local
+function getLocalIP() {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const interface of interfaces[name]) {
+      if (interface.family === 'IPv4' && !interface.internal) {
+        return interface.address;
+      }
+    }
+  }
+  return 'localhost';
+}
+
+const LOCAL_IP = getLocalIP();
+
+// CORS configurado para permitir acceso desde la red
+app.use(cors({
+  origin: [
+    'http://localhost:3000',
+    'https://localhost:3000',
+    `http://${LOCAL_IP}:3000`,
+    `https://${LOCAL_IP}:3000`,
+    // Agrega rangos de IP comunes para mayor compatibilidad
+    /^https?:\/\/192\.168\.\d{1,3}\.\d{1,3}(:\d+)?$/,
+    /^https?:\/\/10\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?$/,
+    /^https?:\/\/172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}(:\d+)?$/
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "../frontend")));
 
@@ -37,7 +68,16 @@ db.run(
   )`
 );
 
-// Endpoints
+// Endpoint para obtener info del servidor (útil para debugging)
+app.get("/info", (req, res) => {
+  res.json({ 
+    message: "Servidor funcionando", 
+    ip: LOCAL_IP,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Endpoints existentes
 app.get("/visitas", (req, res) => {
   db.all("SELECT * FROM visitas", [], (err, rows) => {
     if (err) res.status(500).json({ error: err.message });
@@ -57,27 +97,56 @@ app.post("/visitas", (req, res) => {
     fecha_hora,
   } = req.body;
 
+  console.log("📝 Guardando visita:", { run, num_doc, fecha_hora });
+
   const query =
     "INSERT INTO visitas(run,nombres,apellidos,fecha_nac,sexo,num_doc,tipo_evento,fecha_hora) VALUES(?,?,?,?,?,?,?,?)";
   db.run(
     query,
     [run, nombres, apellidos, fecha_nac, sexo, num_doc, tipo_evento, fecha_hora],
     function (err) {
-      if (err) res.status(500).json({ error: err.message });
-      else res.json({ id: this.lastID });
+      if (err) {
+        console.error("❌ Error al guardar:", err);
+        res.status(500).json({ error: err.message });
+      } else {
+        console.log("✅ Visita guardada con ID:", this.lastID);
+        res.json({ id: this.lastID });
+      }
     }
   );
 });
 
-// Generar certificado autofirmado dinámicamente
-const attrs = [{ name: "commonName", value: "localhost" }];
-const pems = selfsigned.generate(attrs, { days: 365 });
+// Generar certificado con múltiples nombres
+const attrs = [
+  { name: "commonName", value: "localhost" },
+  { name: "commonName", value: LOCAL_IP }
+];
+
+const altNames = [
+  { type: 2, value: "localhost" },
+  { type: 7, ip: "127.0.0.1" },
+  { type: 7, ip: LOCAL_IP }
+];
+
+const pems = selfsigned.generate(attrs, { 
+  days: 365,
+  extensions: [
+    {
+      name: 'subjectAltName',
+      altNames: altNames
+    }
+  ]
+});
 
 // Servidor HTTPS
 https.createServer({ key: pems.private, cert: pems.cert }, app).listen(
   PORT,
   "0.0.0.0",
   () => {
-    console.log(`Servidor HTTPS corriendo en https://0.0.0.0:${PORT}`);
+    console.log(`🚀 Servidor HTTPS corriendo en:`);
+    console.log(`   Local:    https://localhost:${PORT}`);
+    console.log(`   Red:      https://${LOCAL_IP}:${PORT}`);
+    console.log(`   Móvil:    https://${LOCAL_IP}:${PORT}`);
+    console.log(`\n📱 Para acceso desde móvil, usa: https://${LOCAL_IP}:${PORT}`);
   }
 );
