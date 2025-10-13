@@ -28,7 +28,7 @@ const LOCAL_IP = getLocalIP();
 app.use(cors({
   origin: [
     'http://localhost:3000',
-    'https://localhost:3000',
+    'https://localhost:30000',
     `http://${LOCAL_IP}:3001`,
     `https://${LOCAL_IP}:3000`,
     // Agrega rangos de IP comunes para mayor compatibilidad
