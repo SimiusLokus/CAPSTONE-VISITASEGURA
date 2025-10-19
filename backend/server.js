@@ -27,7 +27,7 @@ const LOCAL_IP = getLocalIP();
 // CORS configurado para permitir acceso desde la red
 app.use(cors({
   origin: [
-    'http://localhost:30000',
+    'http://localhost:300000',
     'https://localhost:3000',
     `http://${LOCAL_IP}:3001`,
     `https://${LOCAL_IP}:3000`,
