@@ -29,7 +29,7 @@ app.use(cors({
   origin: [
     'http://localhost:3000',
     'https://localhost:3000',
-    `http://${LOCAL_IP}:3001`,
+    `http://${LOCAL_IP}:3000`,
     `https://${LOCAL_IP}:3000`,
     // Agrega rangos de IP comunes para mayor compatibilidad
     /^https?:\/\/192\.168\.\d{1,3}\.\d{1,3}(:\d+)?$/,
