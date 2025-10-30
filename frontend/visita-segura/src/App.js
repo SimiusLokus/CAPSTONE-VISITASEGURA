@@ -1,15 +1,12 @@
 import React, { useRef, useState, useEffect } from "react";
 import jsQR from "jsqr";
 import "bootstrap/dist/css/bootstrap.min.css";
+import "./App.css"; // estilos personalizados
 
-// Configuración dinámica de API
 const getApiUrl = () => {
-  // Si estás en desarrollo local
-  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-    return 'https://localhost:3001';
+  if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+    return "https://localhost:3001";
   }
-  
-  // Si accedes desde la red (móvil), usa la misma IP del frontend
   return `https://${window.location.hostname}:3001`;
 };
 
@@ -25,31 +22,25 @@ function App() {
   const [error, setError] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [apiUrl, setApiUrl] = useState(API_BASE_URL);
+  const [showToast, setShowToast] = useState(false);
+  const [flip, setFlip] = useState(false); // controla flip QR
 
-  // Test de conectividad al cargar
   useEffect(() => {
     const testConnection = async () => {
       try {
-        console.log(`🔍 Probando conexión a: ${API_BASE_URL}`);
-        const response = await fetch(`${API_BASE_URL}/info`, {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' }
-        });
-        
+        const response = await fetch(`${API_BASE_URL}/info`);
         if (response.ok) {
-          const data = await response.json();
-          console.log(`✅ Conexión exitosa:`, data);
           setApiUrl(API_BASE_URL);
         }
       } catch (err) {
-        console.error(`❌ Error de conexión:`, err);
+        console.error("❌ Error de conexión:", err);
       }
     };
-
     testConnection();
   }, []);
 
   const startScan = async () => {
+    setFlip(true); // animación flip
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "environment" },
@@ -62,7 +53,7 @@ function App() {
       setSuccess(false);
       setError(false);
       setErrorMsg("");
-    } catch (err) {
+    } catch {
       alert("No se pudo acceder a la cámara.");
     }
   };
@@ -77,14 +68,6 @@ function App() {
 
   useEffect(() => {
     if (!scanning) return;
-
-    const stopScanEffect = () => {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-        setStream(null);
-      }
-      setScanning(false);
-    };
 
     const video = videoRef.current;
     const canvas = document.createElement("canvas");
@@ -112,10 +95,6 @@ function App() {
             setRun(qrRun);
             setSerial(qrSerial);
 
-            console.log("RUN:", qrRun);
-            console.log("Serial:", qrSerial);
-            console.log("📡 Enviando a:", `${apiUrl}/visitas`);
-
             fetch(`${apiUrl}/visitas`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -131,32 +110,31 @@ function App() {
               }),
             })
               .then((res) => {
-                if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 return res.json();
               })
-              .then((data) => {
-                console.log("✅ Guardado en DB con ID:", data.id);
+              .then(() => {
                 setSuccess(true);
                 setError(false);
                 setErrorMsg("");
+
+                // Mostrar toast
+                setShowToast(true);
+                setTimeout(() => setShowToast(false), 3000);
               })
               .catch((err) => {
-                console.error("❌ Error al guardar:", err);
                 setError(true);
                 setSuccess(false);
                 setErrorMsg(err.message || "Error desconocido");
               });
           } catch (e) {
-            console.error("Error al procesar el QR:", e);
             setError(true);
             setErrorMsg(e.message || "Error al procesar QR");
           }
-
-          stopScanEffect();
+          stopScan();
           return;
         }
       }
-
       requestAnimationFrame(tick);
     };
 
@@ -164,55 +142,88 @@ function App() {
   }, [scanning, stream, apiUrl]);
 
   return (
-    <div className="container text-center mt-5">
-      <h1 className="mb-4">Lector QR</h1>
-      
-      {/* Info de conexión */}
-      <div className="mb-3">
-        <small className="text-muted">
-          📡 API: {apiUrl} | 🌐 Accediendo desde: {window.location.hostname}
-        </small>
-      </div>
+    <div className="container-fluid d-flex flex-column align-items-center justify-content-center min-vh-100 bg-light p-3">
+      <div className="card shadow-lg p-4 w-100" style={{ maxWidth: "500px" }}>
+        <h1 className="text-center mb-4 text-primary fw-bold">VisitaSegura</h1>
 
-      <div className="border rounded p-2 d-inline-block">
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          className="w-100"
-          style={{ maxWidth: "300px", aspectRatio: "1/1", objectFit: "cover" }}
-        ></video>
-      </div>
+        <div className="text-center mb-3">
+          <small className="text-muted">
+            📡 API: {apiUrl} <br />
+            🌐 Host: {window.location.hostname}
+          </small>
+        </div>
 
-      <div className="mt-3">
-        {!scanning ? (
-          <button className="btn btn-primary" onClick={startScan}>
-            Iniciar Escaneo
-          </button>
-        ) : (
-          <button className="btn btn-danger" onClick={stopScan}>
-            Detener Escaneo
-          </button>
+        {/* Flip QR / Video */}
+        <div className="flip-container mx-auto mb-4">
+          <div className={`flipper ${flip ? "flipped" : ""}`}>
+            {/* Cara frontal: QR genérico */}
+            <div className="front">
+              <img
+                src="/qr-placeholder.png"
+                alt="QR Placeholder"
+                className="w-100 rounded shadow-sm"
+              />
+            </div>
+
+            {/* Cara trasera: Video */}
+            <div className="back">
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                className="w-100 rounded shadow-sm"
+              ></video>
+            </div>
+          </div>
+        </div>
+
+        <div className="d-grid gap-2">
+          {!scanning ? (
+            <button className="btn btn-primary btn-lg" onClick={startScan}>
+              ▶ Iniciar Escaneo
+            </button>
+          ) : (
+            <button className="btn btn-danger btn-lg" onClick={stopScan}>
+              ⏹ Detener Escaneo
+            </button>
+          )}
+        </div>
+
+        {run && serial && (
+          <div className="mt-3 alert alert-success">
+            <div><strong>RUN:</strong> {run}</div>
+            <div><strong>Serial:</strong> {serial}</div>
+          </div>
+        )}
+
+        {error && (
+          <div className="mt-3 alert alert-danger text-center">
+            ❌ Error: {errorMsg}
+          </div>
         )}
       </div>
 
-      {run && serial && (
-        <div className="mt-3 alert alert-success">
-          <div><strong>RUN:</strong> {run}</div>
-          <div><strong>Serial:</strong> {serial}</div>
-        </div>
-      )}
-
-      {success && (
-        <div className="mt-3 alert alert-info">
-          Usuario registrado ✅
-        </div>
-      )}
-
-      {error && (
-        <div className="mt-3 alert alert-danger">
-          Error al guardar el usuario ❌ <br />
-          {errorMsg}
+      {/* TOAST FLOTANTE */}
+      {showToast && (
+        <div
+          className="toast show position-fixed bottom-0 end-0 m-3"
+          role="alert"
+          onClick={() => setShowToast(false)}
+          style={{ minWidth: "200px", cursor: "pointer" }}
+        >
+          <div className="toast-header bg-success text-white">
+            <strong className="me-auto">VisitaSegura</strong>
+            <small>Ahora</small>
+            <button
+              type="button"
+              className="btn-close btn-close-white ms-2 mb-1"
+              aria-label="Close"
+              onClick={() => setShowToast(false)}
+            ></button>
+          </div>
+          <div className="toast-body">
+            Usuario ingresado con éxito ✅
+          </div>
         </div>
       )}
     </div>
