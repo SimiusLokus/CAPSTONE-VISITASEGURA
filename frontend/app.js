@@ -9,6 +9,42 @@ function App() {
   const [run, setRun] = useState("");
   const [serial, setSerial] = useState("");
 
+  // Funcion para indexar y registrar
+  const indexarYRegistrar = async (run, serial) => {
+    try {
+      // 1. Primero indexar
+      const responseIndexacion = await fetch('https://localhost:3001/api/indexacion/indexar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          run: run,
+          num_doc: serial
+        })
+      });
+
+      const resultadoIndexacion = await responseIndexacion.json();
+      
+      if (resultadoIndexacion.exito) {
+        // 2. Luego registrar con los datos indexados
+        const responseVisita = await fetch('https://localhost:3001/visitas', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(resultadoIndexacion.registroIndexado)
+        });
+
+        if (responseVisita.ok) {
+          alert("Visita registrada: " + resultadoIndexacion.registroIndexado.nombres + " " + resultadoIndexacion.registroIndexado.apellidos);
+        }
+      } else if (resultadoIndexacion.duplicado) {
+        alert("Esta persona ya esta registrada");
+      } else {
+        alert("No se pudo completar el registro");
+      }
+    } catch (error) {
+      alert("Error al procesar el registro");
+    }
+  };
+
   const startScan = async () => {
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -20,7 +56,7 @@ function App() {
       setRun("");
       setSerial("");
     } catch (error) {
-      alert("No se pudo acceder a la cámara.");
+      alert("No se pudo acceder a la camara.");
     }
   };
 
@@ -62,10 +98,16 @@ function App() {
           try {
             const url = new URL(code.data);
             const params = new URLSearchParams(url.search);
-            setRun(params.get("RUN") || "");
-            setSerial(params.get("serial") || "");
-            console.log("RUN:", params.get("RUN") || "");
-            console.log("Serial:", params.get("serial") || "");
+            const runValue = params.get("RUN") || "";
+            const serialValue = params.get("serial") || "";
+            setRun(runValue);
+            setSerial(serialValue);
+            console.log("RUN:", runValue);
+            console.log("Serial:", serialValue);
+
+            // Llamar a la funcion de indexacion y registro despues de escanear
+            indexarYRegistrar(runValue, serialValue);
+
           } catch (e) {
             alert("Error al procesar el QR");
           }

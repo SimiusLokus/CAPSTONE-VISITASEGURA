@@ -1,0 +1,7 @@
+1. Frontend escanea QR (RUN + NumDoc)
+2. Frontend → /api/indexacion/indexar (RUN + NumDoc)  
+3. Servicio verifica: ¿Ya existe este RUN/NumDoc?
+4. Servicio busca: dato ficticio NO usado con este RUN
+5. Servicio retorna: combinación única
+6. Frontend → /visitas con datos completos
+7. Backend inserta en base de datos
