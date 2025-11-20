@@ -21,19 +21,20 @@ function getLocalIP() {
   }
   return "localhost";
 }
-
 const LOCAL_IP = getLocalIP();
 
 // CORS acceso desde frontend
-app.use(cors({
-  origin: [
-    'http://localhost:3000',
-    'https://localhost:3000',
-    `http://${LOCAL_IP}:3000`,
-    `https://${LOCAL_IP}:3000`,
-  ],
-  credentials: true
-}));
+app.use(
+  cors({
+    origin: [
+      "http://localhost:3000",
+      "https://localhost:3000",
+      `http://${LOCAL_IP}:3000`,
+      `https://${LOCAL_IP}:3000`,
+    ],
+    credentials: true,
+  })
+);
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "../frontend")));
@@ -47,92 +48,145 @@ const db = new sqlite3.Database(
   }
 );
 
-// Crear tabla visitas
+// 🔥 FIX SQLITE_BUSY
+db.serialize();
+db.run("PRAGMA busy_timeout = 5000");  // espera 5 seg
+db.run("PRAGMA journal_mode = WAL");   // modo WAL permite concurrencia real
+
+// Crear tablas
 db.run(`
-  CREATE TABLE IF NOT EXISTS visitas (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    run TEXT,
-    nombres TEXT,
-    apellidos TEXT,
-    fecha_nac TEXT,
-    sexo TEXT,
-    num_doc TEXT,
-    tipo_evento TEXT,
-    fecha_hora TEXT
-  )
+ CREATE TABLE IF NOT EXISTS visitas (
+   id INTEGER PRIMARY KEY AUTOINCREMENT,
+   run TEXT,
+   nombres TEXT,
+   apellidos TEXT,
+   fecha_nac TEXT,
+   sexo TEXT,
+   num_doc TEXT,
+   tipo_evento TEXT,
+   hora_entrada TEXT,
+   hora_salida TEXT
+ )
 `);
 
-// Crear tabla usuarios
 db.run(`
-  CREATE TABLE IF NOT EXISTS usuarios (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE,
-    password TEXT,
-    rol TEXT
-  )
+ CREATE TABLE IF NOT EXISTS usuarios (
+   id INTEGER PRIMARY KEY AUTOINCREMENT,
+   username TEXT UNIQUE,
+   password TEXT,
+   rol TEXT
+ )
 `);
-
 
 // ---- ENDPOINTS ----
 
 app.post("/login", (req, res) => {
   const { username, password } = req.body;
-
   db.get(
     "SELECT * FROM usuarios WHERE username = ? AND password = ?",
     [username, password],
     (err, row) => {
-      if (err) {
-        return res.status(500).json({ ok: false, error: "Error interno" });
+      if (err) return res.status(500).json({ ok: false, error: "Error interno" });
+      if (!row) return res.json({ ok: false, error: "Credenciales incorrectas" });
+      return res.json({ ok: true, username: row.username, rol: row.rol });
+    }
+  );
+});
+
+// POST /visitas
+app.post("/visitas", (req, res) => {
+  const {
+    run,
+    nombres = "no disponible",
+    apellidos = "no disponible",
+    fecha_nac = "no disponible",
+    sexo = "no disponible",
+    num_doc = "no disponible",
+    tipo_evento = "Visita", // default "Visita"
+    accion, // "entrada" o "salida"
+  } = req.body;
+
+  if (!run || !accion) return res.status(400).json({ ok: false, error: "Falta run o accion" });
+
+  const ahoraIso = new Date().toISOString();
+
+  // Buscar último registro
+  db.get(`SELECT * FROM visitas WHERE run = ? ORDER BY id DESC LIMIT 1`, [run], (err, ultimo) => {
+    if (err) {
+      console.error("Error DB SELECT ultimo:", err);
+      return res.status(500).json({ ok: false, error: "Error en BD" });
+    }
+
+    // ENTRADA
+    if (accion === "entrada") {
+      if (ultimo && ultimo.hora_entrada && !ultimo.hora_salida) {
+        return res.status(400).json({ ok: false, error: "Ya existe una entrada abierta" });
       }
 
-      if (!row) {
-        return res.json({ ok: false, error: "Credenciales incorrectas" });
-      }
-
-      return res.json({
-        ok: true,
-        username: row.username,
-        rol: row.rol
+      const insertSql = `
+        INSERT INTO visitas (run, nombres, apellidos, fecha_nac, sexo, num_doc, tipo_evento, hora_entrada, hora_salida)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)
+      `;
+      db.run(insertSql, [run, nombres, apellidos, fecha_nac, sexo, num_doc, tipo_evento, ahoraIso], function (insErr) {
+        if (insErr) {
+          console.error("Error INSERT entrada:", insErr.message);
+          return res.status(500).json({ ok: false, error: "Error al crear entrada" });
+        }
+        return res.json({ ok: true, tipo: "entrada", mensaje: "Entrada registrada", id: this.lastID, hora_entrada: ahoraIso, tipo_evento });
       });
     }
-  );
-});
 
-app.post("/visitas", (req, res) => {
-  const { run, nombres, apellidos, fecha_nac, sexo, num_doc, tipo_evento, fecha_hora } = req.body;
+    // SALIDA
+    else if (accion === "salida") {
+      db.get(
+        `SELECT * FROM visitas 
+         WHERE run = ? 
+         AND hora_entrada IS NOT NULL 
+         AND (hora_salida IS NULL OR hora_salida = '') 
+         ORDER BY id DESC LIMIT 1`,
+        [run],
+        (openErr, abierto) => {
+          if (openErr) {
+            console.error("Error DB SELECT abierto:", openErr);
+            return res.status(500).json({ ok: false, error: "Error en BD" });
+          }
 
-  const query = `
-    INSERT INTO visitas (run, nombres, apellidos, fecha_nac, sexo, num_doc, tipo_evento, fecha_hora)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `;
+          if (!abierto) return res.status(400).json({ ok: false, error: "No existe una entrada abierta" });
 
-  db.run(
-    query,
-    [run, nombres, apellidos, fecha_nac, sexo, num_doc, tipo_evento, fecha_hora],
-    function(err) {
-      if (err) {
-        console.error("❌ ERROR DB:", err.message);
-        return res.status(500).json({ ok: false, error: "Error al guardar en DB" });
-      }
-
-      console.log("✅ Visita guardada:", this.lastID);
-      return res.json({ ok: true, id: this.lastID });
+          db.run(`UPDATE visitas SET hora_salida = ? WHERE id = ?`, [ahoraIso, abierto.id], function (updErr) {
+            if (updErr) {
+              console.error("Error UPDATE salida:", updErr);
+              return res.status(500).json({ ok: false, error: "Error al registrar salida" });
+            }
+            return res.json({ ok: true, tipo: "salida", mensaje: "Salida registrada", id: abierto.id, hora_salida: ahoraIso });
+          });
+        }
+      );
     }
-  );
+
+    else return res.status(400).json({ ok: false, error: "accion inválida; use 'entrada' o 'salida'" });
+  });
+});
+// GET /visitas → obtener todos los registros
+app.get("/visitas", (req, res) => {
+  const sql = `SELECT * FROM visitas ORDER BY id DESC`;
+
+  db.all(sql, [], (err, rows) => {
+    if (err) {
+      console.error("Error SELECT visitas:", err.message);
+      return res.status(500).json({ ok: false, error: "Error en BD" });
+    }
+
+    return res.json({ ok: true, data: rows });
+  });
 });
 
-// ========= NUEVA CONFIGURACIÓN HTTPS REAL (MKCERT) =========
-
-// ⚠️ QUITA TODO LO DE SELFSIGNED
-// ⚠️ AGREGA RUTA A LOS CERTIFICADOS DE MKCERT
-
+// HTTPS
 const options = {
   key: fs.readFileSync(path.join(__dirname, "./certs/localhost-key.pem")),
   cert: fs.readFileSync(path.join(__dirname, "./certs/localhost.pem")),
 };
 
-// Servidor HTTPS confiable
 https.createServer(options, app).listen(PORT, "0.0.0.0", () => {
   console.log("🚀 Servidor HTTPS funcionando con CERTIFICADO VÁLIDO");
   console.log(`   Local: https://localhost:${PORT}`);
