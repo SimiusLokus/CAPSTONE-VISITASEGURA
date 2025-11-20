@@ -30,7 +30,7 @@ function QRScanner() {
   useEffect(() => {
     const testConnection = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/info`);
+        const response = await fetch(`${API_BASE_URL}`);
         if (response.ok) setApiUrl(API_BASE_URL);
       } catch (err) {
         console.error("❌ Error de conexión:", err);

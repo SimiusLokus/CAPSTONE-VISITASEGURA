@@ -99,6 +99,28 @@ app.post("/login", (req, res) => {
   );
 });
 
+app.post("/visitas", (req, res) => {
+  const { run, nombres, apellidos, fecha_nac, sexo, num_doc, tipo_evento, fecha_hora } = req.body;
+
+  const query = `
+    INSERT INTO visitas (run, nombres, apellidos, fecha_nac, sexo, num_doc, tipo_evento, fecha_hora)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `;
+
+  db.run(
+    query,
+    [run, nombres, apellidos, fecha_nac, sexo, num_doc, tipo_evento, fecha_hora],
+    function(err) {
+      if (err) {
+        console.error("❌ ERROR DB:", err.message);
+        return res.status(500).json({ ok: false, error: "Error al guardar en DB" });
+      }
+
+      console.log("✅ Visita guardada:", this.lastID);
+      return res.json({ ok: true, id: this.lastID });
+    }
+  );
+});
 
 // ========= NUEVA CONFIGURACIÓN HTTPS REAL (MKCERT) =========
 
