@@ -2,118 +2,137 @@ import { useEffect, useState } from "react";
 import LogoutButton from "../components/LogoutButton";
 
 function AdminPage() {
-  const [registros, setRegistros] = useState([]);
+  const [visitas, setVisitas] = useState([]);
+  const [filtroFecha, setFiltroFecha] = useState(""); // YYYY-MM-DD
+  const [personasDentro, setPersonasDentro] = useState(0);
+  const [mostrarSoloDentro, setMostrarSoloDentro] = useState(false);
+
+  // Cargar registros desde backend
+  const fetchVisitas = async () => {
+    try {
+      let url = "https://localhost:3001/visitas";
+      if (filtroFecha) url += `?fecha=${filtroFecha}`;
+
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("Error en la respuesta del servidor");
+
+      const data = await response.json();
+      if (data.ok) {
+        setVisitas(data.data);
+
+        // Calcular personas dentro
+        const dentro = data.data.filter((v) => !v.hora_salida || v.hora_salida === "").length;
+        setPersonasDentro(dentro);
+      } else {
+        console.error("Error al cargar visitas:", data.error);
+      }
+    } catch (error) {
+      console.error("Error al cargar visitas:", error);
+    }
+  };
 
   useEffect(() => {
-    async function fetchData() {
-      try {
-        const response = await fetch("https://localhost:3001/visitas", {
-          method: "GET",
-        });
+    fetchVisitas();
+  }, [filtroFecha]);
 
-        const data = await response.json();
-        if (data.ok) {
-          setRegistros(data.data);
-        }
-      } catch (error) {
-        console.error("Error cargando registros:", error);
-      }
-    }
-
-    fetchData();
-  }, []);
+  // Filtrado de tabla según botón "Mostrar solo dentro"
+  const visitasMostradas = mostrarSoloDentro
+    ? visitas.filter((v) => !v.hora_salida || v.hora_salida === "")
+    : visitas;
 
   return (
-    <div style={{ padding: "25px", fontFamily: "Arial" }}>
-      <h1 style={{ marginBottom: "10px" }}>Panel Administrador</h1>
-      <p style={{ marginTop: "0", marginBottom: "20px" }}>
-        Registros de entradas y salidas.
-      </p>
+    <div style={{ padding: "20px", fontFamily: "Arial, sans-serif" }}>
+      <h1 style={{ color: "#1976d2" }}>Panel Administrativo</h1>
+      <p>Bienvenido al panel administrativo.</p>
 
-      <LogoutButton />
+      <div style={{ marginBottom: "15px", display: "flex", gap: "20px", alignItems: "center" }}>
+        <label>
+          Filtrar por fecha:{" "}
+          <input
+            type="date"
+            value={filtroFecha}
+            onChange={(e) => setFiltroFecha(e.target.value)}
+            style={{ padding: "5px 10px", fontSize: "16px" }}
+          />
+        </label>
 
-      {/* TABLA */}
-      <div
-        style={{
-          marginTop: "25px",
-          overflowX: "auto",
-          borderRadius: "10px",
-          border: "1px solid #ccc",
-        }}
-      >
-        <table
+        <div>
+          <strong>Total registros: </strong> {visitas.length}
+        </div>
+
+        <div>
+          <strong>Personas dentro: </strong> {personasDentro}
+        </div>
+
+        <button
+          onClick={() => setMostrarSoloDentro(!mostrarSoloDentro)}
           style={{
-            width: "100%",
-            borderCollapse: "collapse",
-            backgroundColor: "#fff",
+            padding: "6px 12px",
+            backgroundColor: mostrarSoloDentro ? "#d32f2f" : "#1976d2",
+            color: "white",
+            border: "none",
+            borderRadius: "4px",
+            cursor: "pointer",
           }}
         >
-          <thead style={{ backgroundColor: "#1976d2", color: "white" }}>
-            <tr>
-              <th style={cellHead}>#</th>
-              <th style={cellHead}>RUN</th>
-              <th style={cellHead}>Nombre</th>
-              <th style={cellHead}>Apellido</th>
-              <th style={cellHead}>Tipo evento</th>
-              <th style={cellHead}>Hora entrada</th>
-              <th style={cellHead}>Hora salida</th>
-            </tr>
-          </thead>
+          {mostrarSoloDentro ? "Mostrar todos" : "Mostrar solo dentro"}
+        </button>
+      </div>
 
-          <tbody>
-            {registros.length === 0 ? (
-              <tr>
-                <td colSpan="7" style={emptyRow}>
-                  No hay registros todavía.
-                </td>
+      <table
+        style={{
+          width: "100%",
+          borderCollapse: "collapse",
+          textAlign: "left",
+          boxShadow: "0 0 5px rgba(0,0,0,0.2)",
+        }}
+      >
+        <thead>
+          <tr style={{ backgroundColor: "#1976d2", color: "white" }}>
+            <th style={{ padding: "10px" }}>#</th>
+            <th>RUN</th>
+            <th>Nombres</th>
+            <th>Apellidos</th>
+            <th>Tipo Evento</th>
+            <th>Fecha</th>
+            <th>Hora Entrada</th>
+            <th>Hora Salida</th>
+          </tr>
+        </thead>
+        <tbody>
+          {visitasMostradas.length === 0 ? (
+            <tr>
+              <td colSpan="8" style={{ textAlign: "center", padding: "15px" }}>
+                No hay registros
+              </td>
+            </tr>
+          ) : (
+            visitasMostradas.map((v, idx) => (
+              <tr
+                key={v.id}
+                style={{
+                  backgroundColor: idx % 2 === 0 ? "#f9f9f9" : "#ffffff",
+                }}
+              >
+                <td style={{ padding: "8px" }}>{idx + 1}</td>
+                <td>{v.run}</td>
+                <td>{v.nombres}</td>
+                <td>{v.apellidos}</td>
+                <td>{v.tipo_evento}</td>
+                <td>{v.fecha}</td>
+                <td>{v.hora_entrada}</td>
+                <td>{v.hora_salida || "-"}</td>
               </tr>
-            ) : (
-              registros.map((r, index) => (
-                <tr key={r.id} style={index % 2 ? rowEven : rowOdd}>
-                  <td style={cell}>{index + 1}</td>
-                  <td style={cell}>{r.run}</td>
-                  <td style={cell}>{r.nombres}</td>
-                  <td style={cell}>{r.apellidos}</td>
-                  <td style={cell}>{r.tipo_evento || "—"}</td>
-                  <td style={cell}>
-                    {r.hora_entrada
-                      ? new Date(r.hora_entrada).toLocaleString()
-                      : "—"}
-                  </td>
-                  <td style={cell}>
-                    {r.hora_salida
-                      ? new Date(r.hora_salida).toLocaleString()
-                      : "—"}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+            ))
+          )}
+        </tbody>
+      </table>
+
+      <div style={{ marginTop: "20px" }}>
+        <LogoutButton />
       </div>
     </div>
   );
 }
-
-// ------- ESTILOS -------
-const cellHead = {
-  padding: "12px",
-  textAlign: "left",
-  fontWeight: "bold",
-};
-
-const cell = {
-  padding: "10px",
-  borderBottom: "1px solid #ddd",
-};
-
-const rowEven = { backgroundColor: "#f7f7f7" };
-const rowOdd = { backgroundColor: "#ffffff" };
-
-const emptyRow = {
-  padding: "20px",
-  textAlign: "center",
-  color: "#666",
-};
 
 export default AdminPage;

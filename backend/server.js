@@ -64,6 +64,7 @@ db.run(`
    sexo TEXT,
    num_doc TEXT,
    tipo_evento TEXT,
+   fecha TEXT,
    hora_entrada TEXT,
    hora_salida TEXT
  )
@@ -108,7 +109,9 @@ app.post("/visitas", (req, res) => {
 
   if (!run || !accion) return res.status(400).json({ ok: false, error: "Falta run o accion" });
 
-  const ahoraIso = new Date().toISOString();
+  const ahora = new Date();
+  const fecha = ahora.toISOString().split("T")[0];           // YYYY-MM-DD
+  const hora_entrada = ahora.toTimeString().split(" ")[0];   // HH:MM:SS
 
   // Buscar último registro
   db.get(`SELECT * FROM visitas WHERE run = ? ORDER BY id DESC LIMIT 1`, [run], (err, ultimo) => {
@@ -124,15 +127,15 @@ app.post("/visitas", (req, res) => {
       }
 
       const insertSql = `
-        INSERT INTO visitas (run, nombres, apellidos, fecha_nac, sexo, num_doc, tipo_evento, hora_entrada, hora_salida)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)
+        INSERT INTO visitas (run, nombres, apellidos, fecha_nac, sexo, num_doc, tipo_evento, fecha, hora_entrada, hora_salida)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
       `;
-      db.run(insertSql, [run, nombres, apellidos, fecha_nac, sexo, num_doc, tipo_evento, ahoraIso], function (insErr) {
+      db.run(insertSql, [run, nombres, apellidos, fecha_nac, sexo, num_doc, tipo_evento, fecha, hora_entrada], function (insErr) {
         if (insErr) {
           console.error("Error INSERT entrada:", insErr.message);
           return res.status(500).json({ ok: false, error: "Error al crear entrada" });
         }
-        return res.json({ ok: true, tipo: "entrada", mensaje: "Entrada registrada", id: this.lastID, hora_entrada: ahoraIso, tipo_evento });
+        return res.json({ ok: true, tipo: "entrada", mensaje: "Entrada registrada", id: this.lastID, fecha, hora_entrada, tipo_evento });
       });
     }
 
@@ -153,12 +156,13 @@ app.post("/visitas", (req, res) => {
 
           if (!abierto) return res.status(400).json({ ok: false, error: "No existe una entrada abierta" });
 
-          db.run(`UPDATE visitas SET hora_salida = ? WHERE id = ?`, [ahoraIso, abierto.id], function (updErr) {
+          const hora_salida = new Date().toTimeString().split(" ")[0];
+          db.run(`UPDATE visitas SET hora_salida = ? WHERE id = ?`, [hora_salida, abierto.id], function (updErr) {
             if (updErr) {
               console.error("Error UPDATE salida:", updErr);
               return res.status(500).json({ ok: false, error: "Error al registrar salida" });
             }
-            return res.json({ ok: true, tipo: "salida", mensaje: "Salida registrada", id: abierto.id, hora_salida: ahoraIso });
+            return res.json({ ok: true, tipo: "salida", mensaje: "Salida registrada", id: abierto.id, hora_salida });
           });
         }
       );
@@ -167,16 +171,24 @@ app.post("/visitas", (req, res) => {
     else return res.status(400).json({ ok: false, error: "accion inválida; use 'entrada' o 'salida'" });
   });
 });
-// GET /visitas → obtener todos los registros
-app.get("/visitas", (req, res) => {
-  const sql = `SELECT * FROM visitas ORDER BY id DESC`;
 
-  db.all(sql, [], (err, rows) => {
+// GET /visitas → obtener todos los registros o por fecha
+app.get("/visitas", (req, res) => {
+  let sql = "SELECT * FROM visitas";
+  const params = [];
+
+  if (req.query.fecha) {
+    sql += " WHERE fecha = ?";
+    params.push(req.query.fecha);
+  }
+
+  sql += " ORDER BY id DESC";
+
+  db.all(sql, params, (err, rows) => {
     if (err) {
       console.error("Error SELECT visitas:", err.message);
       return res.status(500).json({ ok: false, error: "Error en BD" });
     }
-
     return res.json({ ok: true, data: rows });
   });
 });
