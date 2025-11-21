@@ -1,6 +1,8 @@
 // pages/Login.jsx
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import "./Login.css";
+import fondoImg from "../assets/fondo.jpg";
 
 // Detecta si estás en localhost o red local
 const getApiUrl = () => {
@@ -55,44 +57,56 @@ function Login() {
   };
 
   return (
-    <div style={{ width: "300px", margin: "80px auto", textAlign: "center" }}>
-      <h2>Iniciar Sesión</h2>
+    <div className="login-container" style={{ backgroundImage: `url(${fondoImg})`}} >
+      <div className="login-card">
+        {/* Logo */}
+        <div className="logo">
+          <img 
+            src="/logo_duoc2.png" 
+            alt="Sitemarku Logo" 
+            style={{ width: "325px", height: "74px" }} 
+          />
+        </div>
+        {/* Title */}
+        <h1 className="login-title">Iniciar Sesión</h1>
 
-      <form onSubmit={handleLogin}>
-        <input
-          type="text"
-          placeholder="Usuario"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          required
-          style={{ width: "100%", padding: "8px", marginBottom: "10px" }}
-        />
+        <form onSubmit={handleLogin}>
+          {/* Email/Username */}
+          <div className="input-group">
+            <label className="input-label">Usuario</label>
+            <input
+              type="text"
+              className="input-field"
+              placeholder=""
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+            />
+          </div>
 
-        <input
-          type="password"
-          placeholder="Contraseña"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          style={{ width: "100%", padding: "8px", marginBottom: "10px" }}
-        />
+          {/* Password */}
+          <div className="input-group">
+            <label className="input-label">Contraseña</label>
+            <input
+              type="password"
+              className="input-field"
+              placeholder="••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
 
-        <button
-          type="submit"
-          style={{
-            width: "100%",
-            padding: "10px",
-            background: "#007bff",
-            color: "white",
-            border: "none",
-            cursor: "pointer",
-          }}
-        >
-          Entrar
-        </button>
-      </form>
 
-      {error && <p style={{ color: "red", marginTop: "10px" }}>{error}</p>}
+          {/* Sign In Button */}
+          <button type="submit" className="btn-signin">
+            Ingresar
+          </button>
+        </form>
+
+        {/* Error */}
+        {error && <p className="error-message">{error}</p>}
+      </div>
     </div>
   );
 }
