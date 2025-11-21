@@ -1,82 +1,94 @@
 import { useEffect, useState } from "react";
 import LogoutButton from "../components/LogoutButton";
+import * as XLSX from "xlsx";
+import { saveAs } from "file-saver";
 
 function AdminPage() {
   const [visitas, setVisitas] = useState([]);
   const [filtroFecha, setFiltroFecha] = useState(""); // YYYY-MM-DD
+  const [totalUsuarios, setTotalUsuarios] = useState(0);
   const [personasDentro, setPersonasDentro] = useState(0);
-  const [mostrarSoloDentro, setMostrarSoloDentro] = useState(false);
 
   // Cargar registros desde backend
-  const fetchVisitas = async () => {
+  const fetchVisitas = async (fecha) => {
     try {
-      let url = "https://localhost:3001/visitas";
-      if (filtroFecha) url += `?fecha=${filtroFecha}`;
-
+      const url = fecha 
+        ? `https://localhost:3001/visitas?fecha=${fecha}` 
+        : "https://localhost:3001/visitas";
+      
       const response = await fetch(url);
       if (!response.ok) throw new Error("Error en la respuesta del servidor");
-
+      
       const data = await response.json();
-      if (data.ok) {
-        setVisitas(data.data);
+      const visitasMostradas = data.data || [];
+      setVisitas(visitasMostradas);
 
-        // Calcular personas dentro
-        const dentro = data.data.filter((v) => !v.hora_salida || v.hora_salida === "").length;
-        setPersonasDentro(dentro);
-      } else {
-        console.error("Error al cargar visitas:", data.error);
-      }
+      // Contadores
+      setTotalUsuarios(visitasMostradas.length);
+      setPersonasDentro(visitasMostradas.filter(v => !v.hora_salida).length);
+
     } catch (error) {
       console.error("Error al cargar visitas:", error);
     }
   };
 
   useEffect(() => {
-    fetchVisitas();
+    fetchVisitas(filtroFecha);
   }, [filtroFecha]);
 
-  // Filtrado de tabla según botón "Mostrar solo dentro"
-  const visitasMostradas = mostrarSoloDentro
-    ? visitas.filter((v) => !v.hora_salida || v.hora_salida === "")
-    : visitas;
+  // Exportar Excel
+  const exportarExcel = () => {
+    if (visitas.length === 0) return;
+
+    const dataExport = visitas.map((v, idx) => ({
+      "#": idx + 1,
+      RUN: v.run,
+      Nombres: v.nombres,
+      Apellidos: v.apellidos,
+      "Tipo Evento": v.tipo_evento,
+      Fecha: v.fecha,
+      "Hora Entrada": v.hora_entrada,
+      "Hora Salida": v.hora_salida || "-",
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(dataExport);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Visitas");
+
+    const fechaStr = filtroFecha || new Date().toISOString().split("T")[0];
+    const fileName = `reporte-${fechaStr}.xlsx`;
+
+    const wbout = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([wbout], { type: "application/octet-stream" });
+    saveAs(blob, fileName);
+  };
 
   return (
-    <div style={{ padding: "20px", fontFamily: "Arial, sans-serif" }}>
-      <h1 style={{ color: "#1976d2" }}>Panel Administrativo</h1>
+    <div style={{ padding: "20px" }}>
+      <h1>Hola Administrador</h1>
       <p>Bienvenido al panel administrativo.</p>
 
-      <div style={{ marginBottom: "15px", display: "flex", gap: "20px", alignItems: "center" }}>
+      <div style={{ marginBottom: "15px" }}>
         <label>
           Filtrar por fecha:{" "}
           <input
             type="date"
             value={filtroFecha}
             onChange={(e) => setFiltroFecha(e.target.value)}
-            style={{ padding: "5px 10px", fontSize: "16px" }}
+            style={{ padding: "5px", fontSize: "16px" }}
           />
         </label>
-
-        <div>
-          <strong>Total registros: </strong> {visitas.length}
-        </div>
-
-        <div>
-          <strong>Personas dentro: </strong> {personasDentro}
-        </div>
-
-        <button
-          onClick={() => setMostrarSoloDentro(!mostrarSoloDentro)}
-          style={{
-            padding: "6px 12px",
-            backgroundColor: mostrarSoloDentro ? "#d32f2f" : "#1976d2",
-            color: "white",
-            border: "none",
-            borderRadius: "4px",
-            cursor: "pointer",
-          }}
+        <button 
+          onClick={exportarExcel} 
+          style={{ marginLeft: "10px", padding: "8px 12px", fontSize: "16px" }}
         >
-          {mostrarSoloDentro ? "Mostrar todos" : "Mostrar solo dentro"}
+          Exportar
         </button>
+      </div>
+
+      <div style={{ marginBottom: "15px", fontSize: "16px" }}>
+        <span>Total Usuarios: {totalUsuarios}</span>{" "}
+        <span style={{ marginLeft: "20px" }}>Personas dentro: {personasDentro}</span>
       </div>
 
       <table
@@ -84,12 +96,11 @@ function AdminPage() {
           width: "100%",
           borderCollapse: "collapse",
           textAlign: "left",
-          boxShadow: "0 0 5px rgba(0,0,0,0.2)",
         }}
       >
         <thead>
           <tr style={{ backgroundColor: "#1976d2", color: "white" }}>
-            <th style={{ padding: "10px" }}>#</th>
+            <th style={{ padding: "8px" }}>#</th>
             <th>RUN</th>
             <th>Nombres</th>
             <th>Apellidos</th>
@@ -100,18 +111,18 @@ function AdminPage() {
           </tr>
         </thead>
         <tbody>
-          {visitasMostradas.length === 0 ? (
+          {visitas.length === 0 ? (
             <tr>
-              <td colSpan="8" style={{ textAlign: "center", padding: "15px" }}>
+              <td colSpan="8" style={{ textAlign: "center", padding: "10px" }}>
                 No hay registros
               </td>
             </tr>
           ) : (
-            visitasMostradas.map((v, idx) => (
+            visitas.map((v, idx) => (
               <tr
                 key={v.id}
                 style={{
-                  backgroundColor: idx % 2 === 0 ? "#f9f9f9" : "#ffffff",
+                  backgroundColor: idx % 2 === 0 ? "#f1f1f1" : "#ffffff",
                 }}
               >
                 <td style={{ padding: "8px" }}>{idx + 1}</td>
