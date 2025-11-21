@@ -1,4 +1,4 @@
-// src/pages/QRScanner.js
+// src/pages/QRScanner.jsx
 import React, { useRef, useState, useEffect } from "react";
 import jsQR from "jsqr";
 import "bootstrap/dist/css/bootstrap.min.css";
@@ -7,18 +7,22 @@ import LogoutButton from "../components/LogoutButton";
 
 function EntradaSalidaSelector({ accion, setAccion }) {
   return (
-    <div style={{
-      position: "fixed",
-      top: 12,
-      left: 12,
-      zIndex: 1200,
-      display: "flex",
-      gap: 8,
-      alignItems: "center"
-    }}>
+    <div
+      style={{
+        position: "fixed",
+        top: 12,
+        left: 12,
+        zIndex: 1200,
+        display: "flex",
+        gap: 8,
+        alignItems: "center",
+      }}
+    >
       <button
         type="button"
-        className={`btn btn-sm ${accion === "entrada" ? "btn-success" : "btn-outline-secondary"}`}
+        className={`btn btn-sm ${
+          accion === "entrada" ? "btn-success" : "btn-outline-secondary"
+        }`}
         onClick={() => setAccion("entrada")}
       >
         Entrada
@@ -26,7 +30,9 @@ function EntradaSalidaSelector({ accion, setAccion }) {
 
       <button
         type="button"
-        className={`btn btn-sm ${accion === "salida" ? "btn-primary" : "btn-outline-secondary"}`}
+        className={`btn btn-sm ${
+          accion === "salida" ? "btn-primary" : "btn-outline-secondary"
+        }`}
         onClick={() => setAccion("salida")}
       >
         Salida
@@ -55,7 +61,10 @@ function TipoEventoSelector({ tipoEvento, setTipoEvento, accion }) {
 }
 
 const getApiUrl = () => {
-  if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+  if (
+    window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1"
+  ) {
     return "https://localhost:3001";
   }
   return `https://${window.location.hostname}:3001`;
@@ -121,7 +130,7 @@ export default function QRScanner() {
     const tick = () => {
       if (!scanning) return;
 
-      setTicksSinQR(prev => {
+      setTicksSinQR((prev) => {
         const nuevo = prev + 1;
         if (nuevo > 120) {
           console.log("⛔ Detenido: No se encontró QR.");
@@ -161,7 +170,7 @@ export default function QRScanner() {
                 sexo: "no disponible",
                 num_doc: qrSerial,
                 tipo_evento: tipoEvento, // ahora se guarda correctamente
-                accion: accion // Entrada o Salida
+                accion: accion, // Entrada o Salida
               };
 
               fetch(`${apiUrl}/visitas`, {
@@ -210,37 +219,50 @@ export default function QRScanner() {
   }, [scanning, stream, apiUrl, tipoEvento, accion]);
 
   return (
-    <div className="container-fluid d-flex flex-column align-items-center justify-content-center min-vh-100 bg-light p-3" style={{ position: "relative" }}>
+    <div
+      className="container-fluid d-flex flex-column align-items-center justify-content-center min-vh-100 bg-light p-3"
+      style={{ position: "relative" }}
+    >
       <EntradaSalidaSelector accion={accion} setAccion={setAccion} />
       <LogoutButton />
-      <TipoEventoSelector tipoEvento={tipoEvento} setTipoEvento={setTipoEvento} accion={accion} />
+      <TipoEventoSelector
+        tipoEvento={tipoEvento}
+        setTipoEvento={setTipoEvento}
+        accion={accion}
+      />
 
       <div className="card shadow-lg p-4 w-100" style={{ maxWidth: "500px" }}>
         <h1 className="text-center mb-4 text-primary fw-bold">VisitaSegura</h1>
 
-        <div className="text-center mb-3">
-          <small className="text-muted">
-            📡 API: {apiUrl} <br />
-            🌐 Host: {window.location.hostname}
-          </small>
-        </div>
-
         <div className="flip-container mx-auto mb-4">
           <div className={`flipper ${flip ? "flipped" : ""}`}>
             <div className="front">
-              <img src="/qr-placeholder.png" alt="QR Placeholder" className="w-100 rounded shadow-sm" />
+              <img
+                src="/qr-placeholder.png"
+                alt="QR Placeholder"
+                className="w-100 rounded shadow-sm"
+              />
             </div>
             <div className="back">
-              <video ref={videoRef} autoPlay playsInline className="w-100 rounded shadow-sm"></video>
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                className="w-100 rounded shadow-sm"
+              ></video>
             </div>
           </div>
         </div>
 
         <div className="d-grid gap-2">
           {!scanning ? (
-            <button className="btn btn-primary btn-lg" onClick={startScan}>▶ Iniciar Escaneo</button>
+            <button className="btn btn-primary btn-lg" onClick={startScan}>
+              ▶ Iniciar Escaneo
+            </button>
           ) : (
-            <button className="btn btn-danger btn-lg" onClick={stopScan}>⏹ Detener Escaneo</button>
+            <button className="btn btn-danger btn-lg" onClick={stopScan}>
+              ⏹ Detener Escaneo
+            </button>
           )}
         </div>
 
@@ -260,11 +282,20 @@ export default function QRScanner() {
       </div>
 
       {showToast && (
-        <div className="toast show position-fixed bottom-0 end-0 m-3" role="alert" onClick={() => setShowToast(false)} style={{ minWidth: "200px", cursor: "pointer" }}>
+        <div
+          className="toast show position-fixed bottom-0 end-0 m-3"
+          role="alert"
+          onClick={() => setShowToast(false)}
+          style={{ minWidth: "200px", cursor: "pointer" }}
+        >
           <div className="toast-header bg-success text-white">
             <strong className="me-auto">VisitaSegura</strong>
             <small>Ahora</small>
-            <button type="button" className="btn-close btn-close-white ms-2 mb-1" onClick={() => setShowToast(false)}></button>
+            <button
+              type="button"
+              className="btn-close btn-close-white ms-2 mb-1"
+              onClick={() => setShowToast(false)}
+            ></button>
           </div>
           <div className="toast-body">Usuario ingresado con éxito ✅</div>
         </div>
