@@ -4,10 +4,7 @@ function LogoutButton() {
   const navigate = useNavigate();
 
   const handleLogout = () => {
-    // eliminar sesión
     localStorage.removeItem("usuario");
-
-    // redirigir al login
     navigate("/login");
   };
 
@@ -15,15 +12,13 @@ function LogoutButton() {
     <button
       onClick={handleLogout}
       style={{
-        position: "fixed",
-        top: "20px",
-        right: "20px",
-        padding: "10px 15px",
+        padding: "8px 12px",
         background: "#c0392b",
         color: "white",
         border: "none",
         borderRadius: "5px",
-        cursor: "pointer"
+        cursor: "pointer",
+        fontSize: "0.9rem"
       }}
     >
       Cerrar sesión

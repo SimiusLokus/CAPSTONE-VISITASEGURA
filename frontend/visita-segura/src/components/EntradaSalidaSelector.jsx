@@ -1,25 +1,36 @@
-// EntradaSalidaSelector.jsx
-import React from "react";
+// ---------------------- BOTONES ENTRADA / SALIDA ----------------------
+function EntradaSalidaSelector({ accion, setAccion }) {
+  const baseStyle = {
+    padding: "10px 16px",
+    border: "2px solid white",
+    borderRadius: "8px",
+    fontWeight: "bold",
+    cursor: "pointer",
+    width: "120px",
+    textAlign: "center",
+  };
 
-export default function EntradaSalidaSelector({ tipoEvento, setTipoEvento }) {
   return (
-    <div>
+    <div style={{ display: "flex", gap: "10px" }}>
+      {/* ENTRADA */}
       <button
-        onClick={() => setTipoEvento("entrada")}
+        onClick={() => setAccion("entrada")}
         style={{
-          background: tipoEvento === "entrada" ? "green" : "gray",
-          color: "white",
-          marginRight: 10
+          ...baseStyle,
+          background: accion === "entrada" ? "#FFB61B" : "black",
+          color: accion === "entrada" ? "black" : "white",
         }}
       >
         Entrada
       </button>
 
+      {/* SALIDA */}
       <button
-        onClick={() => setTipoEvento("salida")}
+        onClick={() => setAccion("salida")}
         style={{
-          background: tipoEvento === "salida" ? "blue" : "gray",
-          color: "white"
+          ...baseStyle,
+          background: accion === "salida" ? "#FFB61B" : "black",
+          color: accion === "salida" ? "black" : "white",
         }}
       >
         Salida
