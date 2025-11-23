@@ -4,6 +4,7 @@ import Login from "./pages/Login";
 import QRScanner from "./pages/QRScanner";
 import RequireAuth from "./components/RequireAuth";
 
+
 function App() {
   return (
     <BrowserRouter>
@@ -45,7 +46,7 @@ function App() {
           }
         />
 
-        {/* Ruta catch-all por si alguien entra a algo no existente */}
+        {/* Ruta catch-all */}
         <Route path="*" element={<Navigate to="/login" />} />
 
       </Routes>

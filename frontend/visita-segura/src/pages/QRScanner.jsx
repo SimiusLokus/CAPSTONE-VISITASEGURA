@@ -1,68 +1,81 @@
-// src/pages/QRScanner.jsx
 import React, { useRef, useState, useEffect, useCallback } from "react";
 import jsQR from "jsqr";
-import "bootstrap/dist/css/bootstrap.min.css";
-import "../App.css";
 import LogoutButton from "../components/LogoutButton";
+import { Box, Button, Card, Typography, Paper, Select, MenuItem, FormControl, InputLabel } from "@mui/material";
+import "../App.css";
 import fondoImg from "../assets/fondo.jpg";
 
-// ---------------------- BOTONES ENTRADA / SALIDA ----------------------
+// ---------------------- SELECTOR ENTRADA / SALIDA ----------------------
 function EntradaSalidaSelector({ accion, setAccion }) {
-  const baseStyle = {
-    padding: "6px 12px",
-    borderRadius: "6px",
-    border: "2px solid white",
-    fontWeight: "bold",
-    cursor: "pointer",
-    backgroundColor: "black",
-    color: "white",
-    fontSize: "14px",
-  };
-
   return (
-    <div style={{ display: "flex", gap: "10px" }}>
-      <button
-        onClick={() => setAccion("entrada")}
-        style={{
-          ...baseStyle,
-          backgroundColor: accion === "entrada" ? "#FFB61B" : "black",
-          color: accion === "entrada" ? "black" : "white",
-        }}
-      >
-        Entrada
-      </button>
-
-      <button
-        onClick={() => setAccion("salida")}
-        style={{
-          ...baseStyle,
-          backgroundColor: accion === "salida" ? "#FFB61B" : "black",
-          color: accion === "salida" ? "black" : "white",
-        }}
-      >
-        Salida
-      </button>
-    </div>
+    <Box sx={{ display: "flex", gap: 2 }}>
+      {["entrada", "salida"].map((tipo) => (
+        <Button
+          key={tipo}
+          variant="contained"
+          onClick={() => setAccion(tipo)}
+          sx={{
+            textTransform: "none",
+            fontWeight: 800,
+            px: 2,
+            py: 1,
+            borderRadius: "8px",
+            background:
+              accion === tipo
+                ? "linear-gradient(90deg, #00eaff, #00b7ff)"
+                : "rgba(0,0,0,0.7)",
+            border: "2px solid #00eaff",
+            boxShadow:
+              accion === tipo
+                ? "0 0 12px #00eaff, 0 0 22px #00b7ff"
+                : "0 0 8px rgba(0, 234, 255, 0.3)",
+            color: accion === tipo ? "black" : "#00eaff",
+            "&:hover": {
+              transform: "scale(1.05)",
+              boxShadow: "0 0 20px #00eaff",
+            },
+            transition: "0.2s",
+          }}
+        >
+          {tipo.toUpperCase()}
+        </Button>
+      ))}
+    </Box>
   );
 }
 
+// ---------------------- SELECTOR EVENTO ----------------------
 function TipoEventoSelector({ tipoEvento, setTipoEvento, accion }) {
   if (accion === "salida") return null;
 
   return (
-    <div className="mb-3 text-center">
-      <label className="form-label fw-bold">Tipo de evento:</label>
-      <select
-        className="form-select w-auto mx-auto"
+    <FormControl fullWidth sx={{ mb: 3 }}>
+      <InputLabel sx={{ color: "#00eaff" }}>Tipo de evento</InputLabel>
+
+      <Select
         value={tipoEvento}
         onChange={(e) => setTipoEvento(e.target.value)}
+        sx={{
+          color: "#00eaff",
+          borderRadius: "10px",
+          "& .MuiOutlinedInput-notchedOutline": {
+            borderColor: "#00eaff",
+          },
+          "&:hover .MuiOutlinedInput-notchedOutline": {
+            borderColor: "#00b7ff",
+          },
+          "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
+            borderColor: "#00eaff",
+            boxShadow: "0 0 12px #00eaff",
+          },
+        }}
       >
-        <option value="Visita">Visita</option>
-        <option value="Graduacion">Graduación</option>
-        <option value="Recorrido guiado">Recorrido guiado</option>
-        <option value="Otro">Otro</option>
-      </select>
-    </div>
+        <MenuItem value="Visita">Visita</MenuItem>
+        <MenuItem value="Graduacion">Graduación</MenuItem>
+        <MenuItem value="Recorrido guiado">Recorrido guiado</MenuItem>
+        <MenuItem value="Otro">Otro</MenuItem>
+      </Select>
+    </FormControl>
   );
 }
 
@@ -92,10 +105,8 @@ export default function QRScanner() {
 
   const [accion, setAccion] = useState("entrada");
   const [tipoEvento, setTipoEvento] = useState("Visita");
-
   const [ticksSinQR, setTicksSinQR] = useState(0);
 
-  // STOPSCAN
   const stopScan = useCallback(() => {
     if (stream) {
       stream.getTracks().forEach((t) => t.stop());
@@ -108,6 +119,7 @@ export default function QRScanner() {
   const startScan = async () => {
     setFlip(true);
     setTicksSinQR(0);
+
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "environment" },
@@ -123,11 +135,10 @@ export default function QRScanner() {
       setErrorMsg("");
     } catch (e) {
       alert("No se pudo acceder a la cámara.");
-      console.error(e);
     }
   };
 
-  // ESCANEO
+  // ---------------------- LOOP ESCANEO ----------------------
   useEffect(() => {
     if (!scanning) return;
 
@@ -148,68 +159,61 @@ export default function QRScanner() {
         return nuevo;
       });
 
-      try {
-        if (video && video.readyState === video.HAVE_ENOUGH_DATA) {
-          canvas.width = video.videoWidth || 640;
-          canvas.height = video.videoHeight || 480;
+      if (video && video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
 
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const code = jsQR(imageData.data, imageData.width, imageData.height);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height);
 
-          if (code) {
-            setTicksSinQR(0);
+        if (code) {
+          setTicksSinQR(0);
 
-            try {
-              const url = new URL(code.data);
-              const params = new URLSearchParams(url.search);
+          try {
+            const url = new URL(code.data);
+            const params = new URLSearchParams(url.search);
 
-              const qrRun = params.get("RUN") || "";
-              const qrSerial = params.get("serial") || "";
+            const qrRun = params.get("RUN") || "";
+            const qrSerial = params.get("serial") || "";
 
-              setRun(qrRun);
-              setSerial(qrSerial);
+            setRun(qrRun);
+            setSerial(qrSerial);
 
-              const payload = {
-                run: qrRun,
-                nombres: "no disponible",
-                apellidos: "no disponible",
-                fecha_nac: "no disponible",
-                sexo: "no disponible",
-                num_doc: qrSerial,
-                tipo_evento: tipoEvento,
-                accion: accion,
-              };
+            const payload = {
+              run: qrRun,
+              nombres: "no disponible",
+              apellidos: "no disponible",
+              fecha_nac: "no disponible",
+              sexo: "no disponible",
+              num_doc: qrSerial,
+              tipo_evento: tipoEvento,
+              accion: accion,
+            };
 
-              fetch(`${apiUrl}/visitas`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload),
+            fetch(`${apiUrl}/visitas`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            })
+              .then((res) => res.json())
+              .then(() => {
+                setShowToast(true);
+                setTimeout(() => setShowToast(false), 3000);
               })
-                .then((res) => {
-                  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                  return res.json();
-                })
-                .then(() => {
-                  setShowToast(true);
-                  setTimeout(() => setShowToast(false), 3000);
-                })
-                .catch((err) => {
-                  setError(true);
-                  setErrorMsg(err.message || "Error desconocido");
-                });
-            } catch (e) {
-              setError(true);
-              setErrorMsg(e.message || "Error al procesar QR");
-            }
-
-            stopScan();
-            return;
+              .catch(() => {
+                setError(true);
+                setErrorMsg("Error al registrar la visita.");
+              });
+          } catch (e) {
+            setError(true);
+            setErrorMsg("Código QR inválido.");
           }
+
+          stopScan();
+          return;
         }
-      } catch (outer) {
-        console.error("Error en tick:", outer);
       }
 
       rafId = requestAnimationFrame(tick);
@@ -217,172 +221,199 @@ export default function QRScanner() {
 
     rafId = requestAnimationFrame(tick);
 
-    return () => {
-      if (rafId) cancelAnimationFrame(rafId);
-    };
+    return () => rafId && cancelAnimationFrame(rafId);
   }, [scanning, apiUrl, tipoEvento, accion, stopScan]);
 
-  // ---------------------- RETORNO ----------------------
+  // ---------------------- UI NEON ----------------------
   return (
-    <div
-      className="container-fluid d-flex flex-column align-items-center justify-content-center min-vh-100 p-3"
-      style={{
-        position: "relative",
-        backgroundImage: `url(${fondoImg})`,
+    <Box
+      sx={{
+        minHeight: "100vh",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        p: 2,
+        background: `radial-gradient(circle at 50% 50%, rgba(0,30,40,0.9), rgba(0,0,0,1)), url(${fondoImg})`,
         backgroundSize: "cover",
         backgroundPosition: "center",
-        backgroundRepeat: "no-repeat",
       }}
     >
-
-      {/* CAPA NEGRA 50% */}
-      <div
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
+      <Card
+        sx={{
           width: "100%",
-          height: "100%",
-          background: "rgba(0,0,0,0.5)",
-          zIndex: 1,
-        }}
-      ></div>
-
-      {/* CARD - encima del overlay */}
-      <div
-        className="card shadow-lg p-0 w-100"
-        style={{
-          maxWidth: "500px",
+          maxWidth: 600,
+          borderRadius: 4,
+          p: 0,
           overflow: "hidden",
-          borderRadius: "12px",
-          position: "relative",
-          zIndex: 2,
+          border: "2px solid #00eaff",
+          background: "rgba(0,0,0,0.75)",
+          boxShadow: "0 0 25px #00eaff, 0 0 40px #0088aa",
         }}
       >
-        {/* FRANJA SUPERIOR NEGRA */}
-        <div
-          className="w-100 d-flex justify-content-between align-items-center"
-          style={{
-            background: "black",
-            padding: "14px 16px",
-            margin: "0",
-            width: "100%",
+        {/* BARRA SUPERIOR */}
+        <Box
+          sx={{
+            p: 2,
+            background: "rgba(0,0,0,0.9)",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            borderBottom: "2px solid #00eaff",
           }}
         >
           <EntradaSalidaSelector accion={accion} setAccion={setAccion} />
           <LogoutButton />
-        </div>
+        </Box>
 
-        {/* CONTENIDO PRINCIPAL */}
-        <div className="p-4">
+        {/* CUERPO */}
+        <Box sx={{ p: 3 }}>
           <TipoEventoSelector
             tipoEvento={tipoEvento}
             setTipoEvento={setTipoEvento}
             accion={accion}
           />
 
-          <h1 className="text-center mb-4 fw-bold" style={{ color: "#000000" }}>
-            VisitaSegura
-          </h1>
+          <Typography
+            align="center"
+            variant="h4"
+            sx={{
+              mb: 3,
+              fontWeight: 900,
+              color: "#00eaff",
+              textShadow: "0 0 10px #00eaff",
+            }}
+          >
+            VISITASEGURA
+          </Typography>
 
-          <div className="flip-container mx-auto mb-4" style={{ maxWidth: 350 }}>
-            <div className={`flipper ${flip ? "flipped" : ""}`}>
-              <div className="front">
-                <img
-                  src="/qr-placeholder.png"
-                  alt="QR Placeholder"
-                  className="w-100 rounded shadow-sm"
-                />
-              </div>
-              <div className="back">
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  className="w-100 rounded shadow-sm"
-                ></video>
-              </div>
-            </div>
-          </div>
+          {/* CUADRO QR / VIDEO */}
+          <Box
+            sx={{
+              width: "100%",
+              maxWidth: 360,
+              mx: "auto",
+              overflow: "hidden",
+              borderRadius: 3,
+              border: "3px solid #00eaff",
+              boxShadow: "0 0 20px #00eaff",
+              transition: "0.3s",
+            }}
+          >
+            {!flip ? (
+              <img
+                src="/qr-placeholder.png"
+                alt="QR Placeholder"
+                style={{ width: "100%", display: "block" }}
+              />
+            ) : (
+              <video ref={videoRef} autoPlay playsInline style={{ width: "100%" }} />
+            )}
+          </Box>
 
-          {run && serial && (
-            <div className="mt-3 alert alert-success">
-              <strong>RUN:</strong> {run} <br />
-              <strong>Serial:</strong> {serial} <br />
-              <strong>Tipo evento:</strong> {tipoEvento}
-            </div>
+          {/* RESULTADOS */}
+          {run && (
+            <Paper
+              sx={{
+                mt: 3,
+                p: 2,
+                background: "rgba(0,50,70,0.4)",
+                color: "#00eaff",
+                border: "2px solid #00eaff",
+              }}
+            >
+              <Typography>RUN: {run}</Typography>
+              <Typography>Serial: {serial}</Typography>
+              <Typography>Evento: {tipoEvento}</Typography>
+            </Paper>
           )}
 
           {error && (
-            <div className="mt-3 alert alert-danger text-center">
-              ❌ Error: {errorMsg}
-            </div>
+            <Paper
+              sx={{
+                mt: 3,
+                p: 2,
+                background: "rgba(60,0,0,0.5)",
+                border: "2px solid red",
+                color: "white",
+              }}
+            >
+              ❌ {errorMsg}
+            </Paper>
           )}
-        </div>
+        </Box>
 
-        {/* FRANJA NEGRA INFERIOR */}
-        <div
-          style={{
-            width: "100%",
-            background: "black",
-            padding: "14px 16px",
-            boxSizing: "border-box",
+        {/* BARRA INFERIOR */}
+        <Box
+          sx={{
+            p: 2,
+            background: "rgba(0,0,0,0.9)",
+            borderTop: "2px solid #00eaff",
+            textAlign: "center",
           }}
         >
-          <div className="d-flex justify-content-center" style={{ width: "100%" }}>
-            {!scanning ? (
-              <button
-                onClick={startScan}
-                style={{
-                  padding: "10px 18px",
-                  border: "2px solid white",
-                  background: "#FFB61B",
-                  color: "black",
-                  fontSize: "18px",
-                  fontWeight: "bold",
-                  borderRadius: "6px",
-                }}
-              >
-                ▶ Iniciar Escaneo
-              </button>
-            ) : (
-              <button
-                onClick={stopScan}
-                style={{
-                  padding: "10px 18px",
-                  border: "2px solid white",
-                  background: "red",
-                  color: "#FFFFFF",
-                  fontSize: "18px",
-                  fontWeight: "bold",
-                  borderRadius: "6px",
-                }}
-              >
-                ⏹ Detener Escaneo
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
+          {!scanning ? (
+            <Button
+              onClick={startScan}
+              variant="contained"
+              sx={{
+                fontWeight: 900,
+                fontSize: "1.1rem",
+                px: 4,
+                py: 1.5,
+                borderRadius: "10px",
+                background: "linear-gradient(90deg,#00eaff,#00b7ff)",
+                color: "black",
+                boxShadow: "0 0 18px #00eaff",
+                "&:hover": {
+                  transform: "scale(1.05)",
+                  boxShadow: "0 0 28px #00eaff",
+                },
+              }}
+            >
+              ▶ Iniciar escaneo
+            </Button>
+          ) : (
+            <Button
+              onClick={stopScan}
+              variant="contained"
+              sx={{
+                fontWeight: 900,
+                fontSize: "1.1rem",
+                px: 4,
+                py: 1.5,
+                borderRadius: "10px",
+                background: "linear-gradient(90deg,#ff0040,#b3002d)",
+                boxShadow: "0 0 18px red",
+                "&:hover": {
+                  transform: "scale(1.05)",
+                  boxShadow: "0 0 28px red",
+                },
+              }}
+            >
+              ⏹ Detener escaneo
+            </Button>
+          )}
+        </Box>
+      </Card>
 
+      {/* TOAST */}
       {showToast && (
-        <div
-          className="toast show position-fixed bottom-0 end-0 m-3"
-          role="alert"
-          onClick={() => setShowToast(false)}
-          style={{ minWidth: "200px", cursor: "pointer" }}
+        <Box
+          sx={{
+            position: "fixed",
+            bottom: 20,
+            right: 20,
+            p: 2,
+            borderRadius: "10px",
+            background: "rgba(0,60,80,0.9)",
+            color: "#00eaff",
+            border: "2px solid #00eaff",
+            boxShadow: "0 0 12px #00eaff",
+          }}
         >
-          <div className="toast-header bg-success text-white">
-            <strong className="me-auto">VisitaSegura</strong>
-            <small>Ahora</small>
-            <button
-              type="button"
-              className="btn-close btn-close-white ms-2 mb-1"
-            ></button>
-          </div>
-          <div className="toast-body">Usuario registrado con éxito ✅</div>
-        </div>
+          Usuario registrado con éxito ✅
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }
