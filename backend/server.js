@@ -123,7 +123,7 @@ app.post("/visitas", (req, res) => {
     // ENTRADA
     if (accion === "entrada") {
       if (ultimo && ultimo.hora_entrada && !ultimo.hora_salida) {
-        return res.status(400).json({ ok: false, error: "Ya existe una entrada abierta" });
+        return res.status(400).json({ ok: false, error: "Usuario ya registrado" });
       }
 
       const insertSql = `
@@ -154,7 +154,7 @@ app.post("/visitas", (req, res) => {
             return res.status(500).json({ ok: false, error: "Error en BD" });
           }
 
-          if (!abierto) return res.status(400).json({ ok: false, error: "No existe una entrada abierta" });
+          if (!abierto) return res.status(400).json({ ok: false, error: "Usuario ya posee registro" });
 
           const hora_salida = new Date().toTimeString().split(" ")[0];
           db.run(`UPDATE visitas SET hora_salida = ? WHERE id = ?`, [hora_salida, abierto.id], function (updErr) {
