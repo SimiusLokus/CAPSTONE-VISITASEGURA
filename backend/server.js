@@ -46,7 +46,13 @@ function getLocalIP() {
 const LOCAL_IP = getLocalIP();
 
 // Aplicar middleware de seguridad a todos los endpoints críticos
-app.use(servicioHash.middlewareProteccion());
+app.use((req, res, next) => {
+  // Excluir endpoints públicos del middleware de seguridad
+  if (req.path === '/login' || req.path === '/info') {
+    return next(); // Saltar seguridad para login e info
+  }
+  servicioHash.middlewareProteccion()(req, res, next);
+});
 
 app.use(cors({
   origin: [
