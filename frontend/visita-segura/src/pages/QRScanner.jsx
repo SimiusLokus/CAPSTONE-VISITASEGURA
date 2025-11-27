@@ -155,10 +155,6 @@ export default function QRScanner() {
 
               const payload = {
                 run: qrRun,
-                nombres: "no disponible",
-                apellidos: "no disponible",
-                fecha_nac: "no disponible",
-                sexo: "no disponible",
                 num_doc: qrSerial,
                 tipo_evento: tipoEvento,
                 accion: accion,

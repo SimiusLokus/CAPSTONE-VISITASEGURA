@@ -47,9 +47,16 @@ const LOCAL_IP = getLocalIP();
 
 // Aplicar middleware de seguridad a todos los endpoints críticos
 app.use((req, res, next) => {
-  // Excluir endpoints públicos del middleware de seguridad
-  if (req.path === '/login' || req.path === '/info') {
-    return next(); // Saltar seguridad para login e info
+  const publicEndpoints = [
+    '/login', 
+    '/info', 
+    '/api/cifrado/status',
+    '/api/cifrado/procesar-qr',  // ← AGREGAR ESTE
+    '/visitas'                    // ← Y ESTE
+  ];
+
+  if (publicEndpoints.includes(req.path)) {
+    return next(); // Saltar seguridad para endpoints públicos
   }
   servicioHash.middlewareProteccion()(req, res, next);
 });
@@ -170,11 +177,11 @@ app.post("/visitas", async (req, res) => {
     // COMPORTAMIENTO ORIGINAL (lógica de entrada/salida con WebSocket)
     if (accion && (accion === "entrada" || accion === "salida")) {
       const {
-        nombres = "no disponible",
-        apellidos = "no disponible", 
-        fecha_nac = "no disponible",
-        sexo = "no disponible",
-        tipo_evento = "Visita",
+        nombres,
+        apellidos, 
+        fecha_nac,
+        sexo,
+        tipo_evento,
       } = req.body;
 
       if (!runFinal) return res.status(400).json({ ok: false, error: "Falta run" });
