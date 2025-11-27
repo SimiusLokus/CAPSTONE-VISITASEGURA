@@ -1,3 +1,6 @@
+// frontend/visita-segura/src/utils/cifrado_cliente.js
+
+
 class Cifrado_cliente {
     constructor() {
         this.apiBase = 'https://localhost:3001';

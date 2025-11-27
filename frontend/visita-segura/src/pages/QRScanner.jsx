@@ -1,5 +1,5 @@
 // src/pages/QRScanner.jsx
-import Cifrado_cliente from '../services/cifrado_cliente';
+import Cifrado_cliente from '../utils/cifrado_cliente';
 import React, { useRef, useState, useEffect, useCallback } from "react";
 import jsQR from "jsqr";
 import {
