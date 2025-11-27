@@ -1,3 +1,5 @@
+import { Button } from "@mui/material";
+import PowerSettingsNewIcon from "@mui/icons-material/PowerSettingsNew";
 import { useNavigate } from "react-router-dom";
 
 function LogoutButton() {
@@ -9,20 +11,35 @@ function LogoutButton() {
   };
 
   return (
-    <button
+    <Button
+      variant="contained"
       onClick={handleLogout}
-      style={{
-        padding: "8px 12px",
-        background: "#c0392b",
-        color: "white",
-        border: "none",
-        borderRadius: "5px",
-        cursor: "pointer",
-        fontSize: "0.9rem"
+      sx={{
+        backgroundColor: "#FFB71C",
+        "&:hover": { backgroundColor: "#a93226" },
+
+        // 🔴 tamaño responsivo del botón
+        width: { xs: 40, sm: 44, md: 48, lg: 52 },
+        height: { xs: 40, sm: 44, md: 48, lg: 52 },
+
+        // ❗ DESACTIVAR el minWidth por defecto de MUI
+        minWidth: "unset",
+
+        borderRadius: "50%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 0,
       }}
     >
-      Cerrar sesión
-    </button>
+      <PowerSettingsNewIcon
+        sx={{
+          color: "white",
+          // 🔥 ícono más grande y responsivo
+          fontSize: { xs: 22, sm: 26, md: 30, lg: 32 },
+        }}
+      />
+    </Button>
   );
 }
 

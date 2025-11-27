@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { io } from "socket.io-client";
 import {
   Box,
   Container,
@@ -67,6 +68,33 @@ function AdminPage() {
   useEffect(() => {
     fetchVisitas(filtroFecha);
   }, [filtroFecha]);
+  // WebSocket: actualizar tabla en tiempo real cuando el backend emite "visita_actualizada"
+useEffect(() => {
+  // crea conexión (ajusta la URL si tu backend no está en localhost)
+  const socket = io("https://localhost:3001", {
+    transports: ["websocket"],
+    secure: true,
+  });
+
+  socket.on("connect", () => {
+    console.log("🟢 WS conectado:", socket.id);
+  });
+
+  // escucha el evento que emite tu backend
+  socket.on("visita_actualizada", (payload) => {
+    console.log("🔔 evento visita_actualizada recibido:", payload);
+    fetchVisitas(filtroFecha); // vuelve a cargar la lista según el filtro actual
+  });
+
+  socket.on("disconnect", (reason) => {
+    console.log("🔴 WS desconectado:", reason);
+  });
+
+  return () => {
+    socket.off("visita_actualizada");
+    socket.disconnect();
+  };
+}, [filtroFecha]); // re-conecta si cambia el filtroFecha (igual que tu fetch)
 
   const exportarExcel = () => {
     if (visitas.length === 0) return;

@@ -244,69 +244,76 @@ export default function QRScanner() {
             }}
           >
             {/* Header con gradiente */}
-            <Box
-              sx={{
-                background: `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.primary.main} 100%)`,
-                p: 3,
-                position: "relative",
-                overflow: "hidden",
-                "&::before": {
-                  content: '""',
-                  position: "absolute",
-                  top: -50,
-                  right: -50,
-                  width: 200,
-                  height: 200,
-                  borderRadius: "50%",
-                  background: alpha("#fff", 0.1),
-                },
-              }}
-            >
+          <Box
+            sx={{
+              background: `linear-gradient(
+                135deg, 
+                ${alpha("#000", 0.9)} 0%, 
+                ${alpha("#000", 0.6)} 100%
+              )`,
+              p: 3,
+              position: "relative",
+              overflow: "hidden",
+
+              "&::before": {
+                content: '""',
+                position: "absolute",
+                top: -50,
+                right: -50,
+                width: 200,
+                height: 200,
+                borderRadius: "50%",
+                background: alpha("#fff", 0.05), // ⭐ suave para no opacar el negro
+              },
+            }}
+          >
+
               <Stack
                 direction="row"
                 justifyContent="space-between"
                 alignItems="center"
                 sx={{ position: "relative", zIndex: 1 }}
               >
-                <Stack direction="row" spacing={1.5} alignItems="center">
-                  <QrCodeScanner sx={{ fontSize: 40, color: "white" }} />
+                <Stack direction="row" spacing={1.5} alignItems="center" sx={{ flex: 1 }}>
+                  <QrCodeScanner sx={{ fontSize: 40, color: "white", flexShrink: 0 }} />
+
                   <Typography
                     variant="h4"
                     sx={{
                       color: "white",
                       fontWeight: 800,
                       letterSpacing: "-0.5px",
+
+                      // ✔ hace que se adapte
+                      flexGrow: 1,
+                      flexShrink: 1,
+                      minWidth: 0, // Necesario para que text-overflow funcione
+
+                      // ✔ controla el ajuste del texto
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+
+                      // ✔ tamaño responsivo
+                      fontSize: {
+                        xs: "1.4rem",
+                        sm: "1.8rem",
+                        md: "2rem",
+                      },
                     }}
                   >
                     VisitaSegura
                   </Typography>
                 </Stack>
+
                 <LogoutButton />
               </Stack>
-
-              <Typography
-                variant="body2"
-                sx={{
-                  color: alpha("#fff", 0.9),
-                  mt: 1,
-                  position: "relative",
-                  zIndex: 1,
-                }}
-              >
-                Sistema de registro de visitantes
-              </Typography>
             </Box>
 
             {/* Contenido principal */}
             <Box sx={{ p: 3 }}>
               {/* Toggle Entrada/Salida */}
               <Box sx={{ mb: 3 }}>
-                <Typography
-                  variant="subtitle2"
-                  sx={{ mb: 1.5, fontWeight: 600, color: "text.secondary" }}
-                >
-                  Tipo de registro
-                </Typography>
                 <ToggleButtonGroup
                   value={accion}
                   exclusive
@@ -376,7 +383,7 @@ export default function QRScanner() {
                 sx={{
                   position: "relative",
                   width: "100%",
-                  height: 320,
+                  height: 280, // ⬅️ ANTES: 320 (más compacto)
                   mb: 3,
                   borderRadius: 3,
                   overflow: "hidden",
@@ -401,7 +408,7 @@ export default function QRScanner() {
                         objectFit: "cover",
                       }}
                     />
-                    {/* Overlay de escaneo */}
+
                     <Box
                       sx={{
                         position: "absolute",
@@ -415,8 +422,8 @@ export default function QRScanner() {
                     >
                       <Box
                         sx={{
-                          width: 250,
-                          height: 250,
+                          width: 200,     // ⬅️ ANTES: 250
+                          height: 200,    // ⬅️ ANTES: 250
                           border: `4px solid ${theme.palette.primary.main}`,
                           borderRadius: 3,
                           position: "relative",
@@ -424,8 +431,8 @@ export default function QRScanner() {
                           "&::before, &::after": {
                             content: '""',
                             position: "absolute",
-                            width: 30,
-                            height: 30,
+                            width: 25,   // ⬅️ Antes: 30 (ligeramente más pequeño)
+                            height: 25,
                             borderColor: theme.palette.primary.main,
                             borderStyle: "solid",
                           },
@@ -433,13 +440,13 @@ export default function QRScanner() {
                             top: -4,
                             left: -4,
                             borderWidth: "4px 0 0 4px",
-                            borderTopLeftRadius: 12,
+                            borderTopLeftRadius: 10,
                           },
                           "&::after": {
                             bottom: -4,
                             right: -4,
                             borderWidth: "0 4px 4px 0",
-                            borderBottomRightRadius: 12,
+                            borderBottomRightRadius: 10,
                           },
                         }}
                       />
@@ -449,7 +456,7 @@ export default function QRScanner() {
                         sx={{
                           mt: 3,
                           fontWeight: 700,
-                          fontSize: "0.95rem",
+                          fontSize: "0.90rem", // opcional: un pelito más pequeño
                           px: 2,
                         }}
                       />
@@ -471,17 +478,12 @@ export default function QRScanner() {
                     }}
                   >
                     <QrCodeScanner
-                      sx={{ fontSize: 100, color: alpha("#000", 0.2), mb: 2 }}
+                      sx={{ fontSize: 80, color: alpha("#000", 0.2), mb: 2 }} // ⬅️ ANTES: 100
                     />
-                    <Typography
-                      variant="h6"
-                      sx={{ color: "text.secondary", fontWeight: 600 }}
-                    >
-                      Listo para escanear
-                    </Typography>
                   </Box>
                 )}
               </Paper>
+
 
               {/* Botón de acción */}
               {!scanning ? (
