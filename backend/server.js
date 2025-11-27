@@ -51,8 +51,8 @@ app.use((req, res, next) => {
     '/login', 
     '/info', 
     '/api/cifrado/status',
-    '/api/cifrado/procesar-qr',  // ← AGREGAR ESTE
-    '/visitas'                    // ← Y ESTE
+    '/api/cifrado/procesar-qr',
+    '/visitas'
   ];
 
   if (publicEndpoints.includes(req.path)) {
@@ -94,8 +94,8 @@ const db = new sqlite3.Database(
 
 // FIX SQLITE_BUSY
 db.serialize();
-db.run("PRAGMA busy_timeout = 5000");  
-db.run("PRAGMA journal_mode = WAL");   
+db.run("PRAGMA busy_timeout = 5000");
+db.run("PRAGMA journal_mode = WAL");
 
 // Crear tablas (estructura unificada)
 db.run(`
@@ -174,11 +174,17 @@ app.post("/visitas", async (req, res) => {
       }
     }
 
-    // COMPORTAMIENTO ORIGINAL (lógica de entrada/salida con WebSocket)
+    // helper: considerar vacío si null/undefined o string vacío
+    const isEmpty = (v) => v === null || v === undefined || (typeof v === "string" && v.trim() === "");
+
+    // ----------------------------------------------------
+    // Si viene acción (entrada/salida) -> manejar con WS
+    // ----------------------------------------------------
     if (accion && (accion === "entrada" || accion === "salida")) {
+      // Destructuramos los campos que llegan (pueden ser null)
       const {
         nombres,
-        apellidos, 
+        apellidos,
         fecha_nac,
         sexo,
         tipo_evento,
@@ -188,21 +194,81 @@ app.post("/visitas", async (req, res) => {
 
       const ahora = new Date();
       const fecha = ahora.toISOString().split("T")[0];
+      // nota: hora_entrada se calculará en el momento de insertar
       const hora_entrada = ahora.toTimeString().split(" ")[0];
 
-      // Lógica de entrada/salida
+      // Recuperar último registro para verificar duplicados (entrada sin salida)
       db.get(`SELECT * FROM visitas WHERE run = ? ORDER BY id DESC LIMIT 1`, [runFinal], (err, ultimo) => {
         if (err) {
           console.error("Error DB SELECT ultimo:", err);
           return res.status(500).json({ ok: false, error: "Error en BD" });
         }
 
-        // ENTRADA
+        // ------------------------
+        //  ENTRADA (con autocompletado si faltan datos)
+        // ------------------------
         if (accion === "entrada") {
+
+          // Si ya existe una entrada abierta (sin salida), bloquear
           if (ultimo && ultimo.hora_entrada && !ultimo.hora_salida) {
             return res.status(400).json({ ok: false, error: "Usuario ya registrado" });
           }
 
+          // Si faltan datos (null/undefined/empty), autocompletar
+          if (isEmpty(nombres) || isEmpty(apellidos) || isEmpty(fecha_nac) || isEmpty(sexo)) {
+            console.log("Autocompletando datos para RUN:", runFinal);
+
+            // 1) Buscar datos previos completos para este run (si existen)
+            return db.get(
+              `SELECT nombres, apellidos, fecha_nac, sexo 
+               FROM visitas 
+               WHERE run = ? AND nombres IS NOT NULL 
+               ORDER BY id DESC LIMIT 1`,
+              [runFinal],
+              async (errPrevio, previo) => {
+                if (errPrevio) {
+                  console.error("Error buscando datos previos:", errPrevio);
+                  return res.status(500).json({ ok: false, error: "Error en BD" });
+                }
+
+                if (previo) {
+                  // Reutilizar datos previos
+                  console.log("Datos previos encontrados → reutilizando");
+                  req.body.nombres = previo.nombres;
+                  req.body.apellidos = previo.apellidos;
+                  req.body.fecha_nac = previo.fecha_nac;
+                  req.body.sexo = previo.sexo;
+
+                  // Proceder a insertar con los datos ya en req.body
+                  return procesarEntradaConDatosCompletos();
+                }
+
+                // No hay datos previos: indexar desde tabla/script
+                console.log("Indexando datos desde tabla/script para RUN:", runFinal);
+                try {
+                  const resultado = await indexarRegistro(runFinal, numDocFinal);
+
+                  if (!resultado || !resultado.exito) {
+                    const mensaje = resultado && resultado.mensaje ? resultado.mensaje : "No se pudo indexar el registro";
+                    return res.status(400).json({ ok: false, error: mensaje });
+                  }
+
+                  const r = resultado.registroIndexado || {};
+                  req.body.nombres = r.nombres;
+                  req.body.apellidos = r.apellidos;
+                  req.body.fecha_nac = r.fecha_nac;
+                  req.body.sexo = r.sexo;
+
+                  return procesarEntradaConDatosCompletos();
+                } catch (e) {
+                  console.error("Error indexando registro:", e);
+                  return res.status(500).json({ ok: false, error: "Error al indexar datos" });
+                }
+              }
+            );
+          }
+
+          // Si llegamos aquí es porque los datos vienen completos (no nulos) -> insertar normalmente
           const insertSql = `
             INSERT INTO visitas (run, nombres, apellidos, fecha_nac, sexo, num_doc, tipo_evento, fecha, hora_entrada, hora_salida, datos_cifrados)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
@@ -213,7 +279,7 @@ app.post("/visitas", async (req, res) => {
               return res.status(500).json({ ok: false, error: "Error al crear entrada" });
             }
 
-            //  EMITIR EVENTO WEBSOCKET
+            // EMITIR EVENTO WEBSOCKET
             io.emit("visita_actualizada", {
               tipo: "entrada",
               id: this.lastID,
@@ -223,20 +289,22 @@ app.post("/visitas", async (req, res) => {
               hora_entrada,
             });
 
-            return res.json({ 
-              ok: true, 
-              tipo: "entrada", 
-              mensaje: "Entrada registrada", 
-              id: this.lastID, 
-              fecha, 
-              hora_entrada, 
+            return res.json({
+              ok: true,
+              tipo: "entrada",
+              mensaje: "Entrada registrada",
+              id: this.lastID,
+              fecha,
+              hora_entrada,
               tipo_evento,
               cifrado: !!datosCifradosParaBD
             });
           });
         }
 
-        // SALIDA  
+        // ------------------------
+        //  SALIDA
+        // ------------------------
         else if (accion === "salida") {
           db.get(
             `SELECT * FROM visitas 
@@ -268,39 +336,42 @@ app.post("/visitas", async (req, res) => {
                   hora_salida,
                 });
 
-                return res.json({ 
-                  ok: true, 
-                  tipo: "salida", 
-                  mensaje: "Salida registrada", 
-                  id: abierto.id, 
-                  hora_salida 
+                return res.json({
+                  ok: true,
+                  tipo: "salida",
+                  mensaje: "Salida registrada",
+                  id: abierto.id,
+                  hora_salida
                 });
               });
             }
           );
         }
-      });
-    }
-    
-    // COMPORTAMIENTO NUEVO (indexación automática)
+      }); // fin db.get ultimo
+    } // fin if accion entrada/salida
+
+    // ----------------------------------------------------
+    //  COMPORTAMIENTO NUEVO (indexación automática cuando NO viene accion)
+    //  Esto mantiene tu lógica original para casos sin "accion"
+    // ----------------------------------------------------
     else if (runFinal && numDocFinal && !req.body.nombres) {
       // Usar el servicio de indexación de la rama moderna
       const resultadoIndexacion = await indexarRegistro(runFinal, numDocFinal);
-      
+
       if (!resultadoIndexacion.exito) {
-        return res.status(400).json({ 
-          error: resultadoIndexacion.mensaje 
+        return res.status(400).json({
+          error: resultadoIndexacion.mensaje
         });
       }
 
       // Insertar el registro indexado
       const registro = resultadoIndexacion.registroIndexado;
       const query = "INSERT INTO visitas(run, nombres, apellidos, fecha_nac, sexo, num_doc, tipo_evento, fecha, hora_entrada, datos_cifrados) VALUES(?,?,?,?,?,?,?,?,?,?)";
-      
+
       const ahora = new Date();
       const fecha = ahora.toISOString().split("T")[0];
       const hora_entrada = ahora.toTimeString().split(" ")[0];
-      
+
       db.run(
         query,
         [registro.run, registro.nombres, registro.apellidos, registro.fecha_nac, registro.sexo, registro.num_doc, registro.tipo_evento || "Visita", fecha, hora_entrada, datosCifradosParaBD || null],
@@ -322,7 +393,7 @@ app.post("/visitas", async (req, res) => {
               indexado: true
             });
 
-            res.json({ 
+            res.json({
               ok: true,
               id: this.lastID,
               indexado: true,
@@ -335,15 +406,17 @@ app.post("/visitas", async (req, res) => {
         }
       );
     }
-    
-    // COMPORTAMIENTO PARA DATOS COMPLETOS (sin acción)
+
+    // ----------------------------------------------------
+    //  COMPORTAMIENTO PARA DATOS COMPLETOS (sin acción)
+    // ----------------------------------------------------
     else {
       const { nombres, apellidos, fecha_nac, sexo, tipo_evento = "Visita" } = req.body;
-      
+
       const ahora = new Date();
       const fecha = ahora.toISOString().split("T")[0];
       const hora_entrada = ahora.toTimeString().split(" ")[0];
-      
+
       const query = "INSERT INTO visitas(run, nombres, apellidos, fecha_nac, sexo, num_doc, tipo_evento, fecha, hora_entrada, datos_cifrados) VALUES(?,?,?,?,?,?,?,?,?,?)";
       db.run(
         query,
@@ -365,14 +438,89 @@ app.post("/visitas", async (req, res) => {
               hora_entrada,
             });
 
-            res.json({ 
-              ok: true, 
+            res.json({
+              ok: true,
               id: this.lastID,
-              tipo: "entrada", 
+              tipo: "entrada",
               mensaje: "Entrada registrada",
               cifrado: !!datosCifradosParaBD
             });
           }
+        }
+      );
+    }
+
+    // ----------------------------------------------------
+    // Función auxiliar: insertar entrada cuando req.body ya tenga datos completos
+    // ----------------------------------------------------
+    function procesarEntradaConDatosCompletos() {
+      const {
+        nombres,
+        apellidos,
+        fecha_nac,
+        sexo,
+        tipo_evento = "Visita"
+      } = req.body;
+
+      // Hora y fecha actuales
+      const ahoraLocal = new Date();
+      const fechaLocal = ahoraLocal.toISOString().split("T")[0];
+      const horaEntradaLocal = ahoraLocal.toTimeString().split(" ")[0];
+
+      // Verificar de nuevo si hay una entrada abierta (condición de seguridad)
+      db.get(
+        `SELECT * FROM visitas 
+         WHERE run = ? 
+         ORDER BY id DESC LIMIT 1`,
+        [runFinal],
+        (errCheck, ultimoCheck) => {
+          if (errCheck) {
+            console.error("Error DB SELECT:", errCheck);
+            return res.status(500).json({ ok: false, error: "Error en BD" });
+          }
+
+          if (ultimoCheck && ultimoCheck.hora_entrada && !ultimoCheck.hora_salida) {
+            return res.status(400).json({ ok: false, error: "Usuario ya registrado" });
+          }
+
+          const query = `
+            INSERT INTO visitas(
+              run, nombres, apellidos, fecha_nac, sexo, 
+              num_doc, tipo_evento, fecha, hora_entrada, hora_salida, datos_cifrados
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+          `;
+
+          db.run(
+            query,
+            [runFinal, nombres, apellidos, fecha_nac, sexo, numDocFinal || "no disponible",
+             tipo_evento, fechaLocal, horaEntradaLocal, datosCifradosParaBD || null],
+            function (insErr) {
+              if (insErr) {
+                console.error("Error INSERT entrada (autocompletado):", insErr);
+                return res.status(500).json({ ok: false, error: "Error al registrar" });
+              }
+
+              io.emit("visita_actualizada", {
+                tipo: "entrada",
+                id: this.lastID,
+                run: runFinal,
+                tipo_evento,
+                fecha: fechaLocal,
+                hora_entrada: horaEntradaLocal
+              });
+
+              return res.json({
+                ok: true,
+                tipo: "entrada",
+                mensaje: "Entrada registrada",
+                id: this.lastID,
+                fecha: fechaLocal,
+                hora_entrada: horaEntradaLocal,
+                tipo_evento,
+                cifrado: !!datosCifradosParaBD
+              });
+            }
+          );
         }
       );
     }
