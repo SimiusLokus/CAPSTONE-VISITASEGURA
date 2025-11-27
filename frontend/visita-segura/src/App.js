@@ -1,3 +1,5 @@
+// frontend/visita-segura/src/App.js
+
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import AdminPage from "./pages/AdminPage";
 import Login from "./pages/Login";

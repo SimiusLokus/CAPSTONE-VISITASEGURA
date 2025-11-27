@@ -1,3 +1,5 @@
+// frontend/visita-segura/src/utils/hash_cliente.js
+
 /**
  * Cliente de seguridad para el frontend
  * Compatible con React y jsQR

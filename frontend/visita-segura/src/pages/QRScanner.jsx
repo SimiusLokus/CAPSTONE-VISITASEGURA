@@ -1,4 +1,4 @@
-// src/pages/QRScanner.jsx
+// frontend/visita-segura/src/pages/QRScanner.jsx
 import Cifrado_cliente from '../utils/cifrado_cliente';
 import React, { useRef, useState, useEffect, useCallback } from "react";
 import jsQR from "jsqr";
@@ -22,6 +22,7 @@ import {
   Container,
   useTheme,
   alpha,
+  CircularProgress,
 } from "@mui/material";
 import {
   QrCodeScanner,
@@ -56,6 +57,7 @@ export default function QRScanner() {
   const [serial, setSerial] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [showToast, setShowToast] = useState(false);
+  const [procesando, setProcesando] = useState(false);
 
   const [accion, setAccion] = useState("entrada");
   const [tipoEvento, setTipoEvento] = useState("Visita");
@@ -70,6 +72,7 @@ export default function QRScanner() {
     }
     setScanning(false);
     setFlip(false);
+    setProcesando(false);
   }, [stream]);
 
   const startScan = async () => {
@@ -107,7 +110,7 @@ export default function QRScanner() {
   };
 
   useEffect(() => {
-    if (!scanning) return;
+    if (!scanning || procesando) return;
 
     const video = videoRef.current;
     const canvas = document.createElement("canvas");
@@ -116,7 +119,7 @@ export default function QRScanner() {
     let rafId = null;
 
     const tick = () => {
-      if (!scanning) return;
+      if (!scanning || procesando) return;
 
       setTicksSinQR((prev) => {
         const nuevo = prev + 1;
@@ -143,147 +146,130 @@ export default function QRScanner() {
 
           if (code) {
             setTicksSinQR(0);
-            try {
-              const url = new URL(code.data);
-              const params = new URLSearchParams(url.search);
+            setProcesando(true);
+            
+            (async () => {
+              try {
+                const url = new URL(code.data);
+                const params = new URLSearchParams(url.search);
 
-              const qrRun = params.get("RUN") || "";
-              const qrSerial = params.get("serial") || "";
+                const qrRun = params.get("RUN") || "";
+                const qrSerial = params.get("serial") || "";
 
-              setRun(qrRun);
-              setSerial(qrSerial);
+                setRun(qrRun);
+                setSerial(qrSerial);
 
-              const payload = {
-                run: qrRun,
-                nombres: "no disponible",
-                apellidos: "no disponible",
-                fecha_nac: "no disponible",
-                sexo: "no disponible",
-                num_doc: qrSerial,
-                tipo_evento: tipoEvento,
-                accion: accion,
-              };
+                const responseIndexar = await fetch(`${API_BASE_URL}/api/indexar`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ 
+                    run: qrRun, 
+                    num_doc: qrSerial 
+                  }),
+                });
 
-              // NUEVO: Procesar con cifrado
-              const cifradoCliente = new Cifrado_cliente();
-              cifradoCliente.procesarQRDesdeBackend({
-                run: qrRun,
-                num_doc: qrSerial,
-                tipo_evento: tipoEvento,
-                accion: accion,
-                timestamp: Date.now()
-              })
-              .then(resultadoCifrado => {
-                const payloadFinal = { ...payload };
-                
-                if (resultadoCifrado.ok && resultadoCifrado.datosCifrados) {
-                  payloadFinal.datosCifrados = resultadoCifrado.datosCifrados;
+                if (!responseIndexar.ok) {
+                  const errorData = await responseIndexar.json().catch(() => ({}));
+                  throw new Error(errorData.error || "Error al indexar datos ficticios");
                 }
 
-                fetch(`${API_BASE_URL}/visitas`, {
+                const datosIndexados = await responseIndexar.json();
+
+                if (!datosIndexados.exito) {
+                  throw new Error(datosIndexados.mensaje || "No se pudieron indexar datos");
+                }
+
+                const cifradoCliente = new Cifrado_cliente();
+                const datosParaCifrar = {
+                  run: qrRun,
+                  num_doc: qrSerial,
+                  nombres: datosIndexados.registroIndexado.nombres,
+                  apellidos: datosIndexados.registroIndexado.apellidos,
+                  fecha_nac: datosIndexados.registroIndexado.fecha_nac,
+                  sexo: datosIndexados.registroIndexado.sexo,
+                  tipo_evento: tipoEvento,
+                  accion: accion,
+                  timestamp: Date.now()
+                };
+
+                const resultadoCifrado = await cifradoCliente.procesarQRDesdeBackend(datosParaCifrar);
+
+                const payloadFinal = {
+                  run: qrRun,
+                  num_doc: qrSerial,
+                  nombres: datosIndexados.registroIndexado.nombres,
+                  apellidos: datosIndexados.registroIndexado.apellidos,
+                  fecha_nac: datosIndexados.registroIndexado.fecha_nac,
+                  sexo: datosIndexados.registroIndexado.sexo,
+                  tipo_evento: tipoEvento,
+                  accion: accion,
+                  datos_cifrados: resultadoCifrado.datosCifrados || null
+                };
+
+                const responseVisita = await fetch(`${API_BASE_URL}/visitas`, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify(payloadFinal),
-                })
-                  .then(async (res) => {
-                    if (!res.ok) {
-                      let data = {};
-                      try { data = await res.json(); } catch {}
-                      
-                      if (data.error) throw new Error(data.error);
-                      
-                      if (res.status === 409) {
-                        if (accion === "entrada") throw new Error("Usuario ya ingresado");
-                        if (accion === "salida") throw new Error("El usuario ya ha salido");
-                      }
-                      
-                      throw new Error(`HTTP ${res.status}`);
-                    }
-                    return res.json();
-                  })
-                  .then(() => {
-                    setShowToast(true);
-                  })
-                  .catch((err) => {
-                    setErrorMsg(err.message || "Error desconocido");
-                  })
-                  .finally(() => {
-                    stopScan();
-                  });
-              })
-              .catch(cifradoError => {
-                console.warn('Cifrado fallo, enviando sin cifrar:', cifradoError);
-                
-                fetch(`${API_BASE_URL}/visitas`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify(payload),
-                })
-                  .then(async (res) => {
-                    if (!res.ok) {
-                      let data = {};
-                      try { data = await res.json(); } catch {}
-                      
-                      if (data.error) throw new Error(data.error);
-                      
-                      if (res.status === 409) {
-                        if (accion === "entrada") throw new Error("Usuario ya ingresado");
-                        if (accion === "salida") throw new Error("El usuario ya ha salido");
-                      }
-                      
-                      throw new Error(`HTTP ${res.status}`);
-                    }
-                    return res.json();
-                  })
-                  .then(() => {
-                    setShowToast(true);
-                  })
-                  .catch((err) => {
-                    setErrorMsg(err.message || "Error desconocido");
-                  })
-                  .finally(() => {
-                    stopScan();
-                  });
-              });
+                });
 
-            } catch (e) {
-              setErrorMsg(e.message || "Error al procesar QR");
-              stopScan();
-            }
+                if (!responseVisita.ok) {
+                  const data = await responseVisita.json().catch(() => ({}));
+                  
+                  if (data.error) throw new Error(data.error);
+                  
+                  if (responseVisita.status === 409) {
+                    if (accion === "entrada") throw new Error("Usuario ya ingresado");
+                    if (accion === "salida") throw new Error("El usuario ya ha salido");
+                  }
+                  
+                  throw new Error(`HTTP ${responseVisita.status}`);
+                }
+
+                await responseVisita.json();
+                setShowToast(true);
+
+              } catch (err) {
+                setErrorMsg(err.message || "Error al procesar QR");
+              } finally {
+                stopScan();
+              }
+            })();
+
             return;
           }
         }
-      } catch {}
+      } catch (err) {
+        console.error("Error en tick:", err);
+      }
 
       rafId = requestAnimationFrame(tick);
     };
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [scanning, tipoEvento, accion, stopScan]);
+  }, [scanning, procesando, tipoEvento, accion, stopScan]);
 
   return (
-      <Box
-        sx={{
-          minHeight: "100vh",
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          position: "relative",
-          padding: 2,
-          background: `radial-gradient(
-            circle at 50% 35%,
-            rgba(255,255,255,0.20) 0%,
-            rgba(0,0,0,0.65) 45%,
-            rgba(0,0,0,0.9) 90%
-          ),
-          url(${fondoImg})`,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          backgroundAttachment: "fixed",
-        }}
-      >
-
+    <Box
+      sx={{
+        minHeight: "100vh",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        position: "relative",
+        padding: 2,
+        background: `radial-gradient(
+          circle at 50% 35%,
+          rgba(255,255,255,0.20) 0%,
+          rgba(0,0,0,0.65) 45%,
+          rgba(0,0,0,0.9) 90%
+        ),
+        url(${fondoImg})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundAttachment: "fixed",
+      }}
+    >
       <Container maxWidth="sm" sx={{ position: "relative", zIndex: 10, py: 4 }}>
         <Fade in timeout={800}>
           <Paper
@@ -296,31 +282,28 @@ export default function QRScanner() {
               border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
             }}
           >
-            {/* Header con gradiente */}
-          <Box
-            sx={{
-              background: `linear-gradient(
-                135deg, 
-                ${alpha("#000", 0.9)} 0%, 
-                ${alpha("#000", 0.6)} 100%
-              )`,
-              p: 3,
-              position: "relative",
-              overflow: "hidden",
-
-              "&::before": {
-                content: '""',
-                position: "absolute",
-                top: -50,
-                right: -50,
-                width: 200,
-                height: 200,
-                borderRadius: "50%",
-                background: alpha("#fff", 0.05), // ⭐ suave para no opacar el negro
-              },
-            }}
-          >
-
+            <Box
+              sx={{
+                background: `linear-gradient(
+                  135deg, 
+                  ${alpha("#000", 0.9)} 0%, 
+                  ${alpha("#000", 0.6)} 100%
+                )`,
+                p: 3,
+                position: "relative",
+                overflow: "hidden",
+                "&::before": {
+                  content: '""',
+                  position: "absolute",
+                  top: -50,
+                  right: -50,
+                  width: 200,
+                  height: 200,
+                  borderRadius: "50%",
+                  background: alpha("#fff", 0.05),
+                },
+              }}
+            >
               <Stack
                 direction="row"
                 justifyContent="space-between"
@@ -329,25 +312,18 @@ export default function QRScanner() {
               >
                 <Stack direction="row" spacing={1.5} alignItems="center" sx={{ flex: 1 }}>
                   <QrCodeScanner sx={{ fontSize: 40, color: "white", flexShrink: 0 }} />
-
                   <Typography
                     variant="h4"
                     sx={{
                       color: "white",
                       fontWeight: 800,
                       letterSpacing: "-0.5px",
-
-                      // ✔ hace que se adapte
                       flexGrow: 1,
                       flexShrink: 1,
-                      minWidth: 0, // Necesario para que text-overflow funcione
-
-                      // ✔ controla el ajuste del texto
+                      minWidth: 0,
                       whiteSpace: "nowrap",
                       overflow: "hidden",
                       textOverflow: "ellipsis",
-
-                      // ✔ tamaño responsivo
                       fontSize: {
                         xs: "1.4rem",
                         sm: "1.8rem",
@@ -358,20 +334,18 @@ export default function QRScanner() {
                     VisitaSegura
                   </Typography>
                 </Stack>
-
                 <LogoutButton />
               </Stack>
             </Box>
 
-            {/* Contenido principal */}
             <Box sx={{ p: 3 }}>
-              {/* Toggle Entrada/Salida */}
               <Box sx={{ mb: 3 }}>
                 <ToggleButtonGroup
                   value={accion}
                   exclusive
                   onChange={(e, v) => v && setAccion(v)}
                   fullWidth
+                  disabled={scanning}
                   sx={{
                     "& .MuiToggleButton-root": {
                       py: 1.5,
@@ -398,7 +372,6 @@ export default function QRScanner() {
                 </ToggleButtonGroup>
               </Box>
 
-              {/* Tipo de evento */}
               {accion === "entrada" && (
                 <Grow in timeout={500}>
                   <FormControl fullWidth sx={{ mb: 3 }}>
@@ -414,6 +387,7 @@ export default function QRScanner() {
                       value={tipoEvento}
                       label="Tipo de evento"
                       onChange={(e) => setTipoEvento(e.target.value)}
+                      disabled={scanning}
                       sx={{
                         borderRadius: 2,
                         "& .MuiOutlinedInput-notchedOutline": {
@@ -421,22 +395,21 @@ export default function QRScanner() {
                         },
                       }}
                     >
-                      <MenuItem value="Visita">🏛️ Visita</MenuItem>
-                      <MenuItem value="Graduacion">🎓 Graduación</MenuItem>
-                      <MenuItem value="Recorrido guiado">🚶 Recorrido guiado</MenuItem>
-                      <MenuItem value="Otro">📋 Otro</MenuItem>
+                      <MenuItem value="Visita">Visita</MenuItem>
+                      <MenuItem value="Graduacion">Graduacion</MenuItem>
+                      <MenuItem value="Recorrido guiado">Recorrido guiado</MenuItem>
+                      <MenuItem value="Otro">Otro</MenuItem>
                     </Select>
                   </FormControl>
                 </Grow>
               )}
 
-              {/* Video/QR Scanner */}
               <Paper
                 elevation={8}
                 sx={{
                   position: "relative",
                   width: "100%",
-                  height: 280, // ⬅️ ANTES: 320 (más compacto)
+                  height: 280,
                   mb: 3,
                   borderRadius: 3,
                   overflow: "hidden",
@@ -475,8 +448,8 @@ export default function QRScanner() {
                     >
                       <Box
                         sx={{
-                          width: 200,     // ⬅️ ANTES: 250
-                          height: 200,    // ⬅️ ANTES: 250
+                          width: 200,
+                          height: 200,
                           border: `4px solid ${theme.palette.primary.main}`,
                           borderRadius: 3,
                           position: "relative",
@@ -484,7 +457,7 @@ export default function QRScanner() {
                           "&::before, &::after": {
                             content: '""',
                             position: "absolute",
-                            width: 25,   // ⬅️ Antes: 30 (ligeramente más pequeño)
+                            width: 25,
                             height: 25,
                             borderColor: theme.palette.primary.main,
                             borderStyle: "solid",
@@ -504,12 +477,13 @@ export default function QRScanner() {
                         }}
                       />
                       <Chip
-                        label="Escaneando..."
+                        label={procesando ? "Procesando..." : "Escaneando..."}
                         color="primary"
+                        icon={procesando ? <CircularProgress size={16} color="inherit" /> : undefined}
                         sx={{
                           mt: 3,
                           fontWeight: 700,
-                          fontSize: "0.90rem", // opcional: un pelito más pequeño
+                          fontSize: "0.90rem",
                           px: 2,
                         }}
                       />
@@ -531,14 +505,12 @@ export default function QRScanner() {
                     }}
                   >
                     <QrCodeScanner
-                      sx={{ fontSize: 80, color: alpha("#000", 0.2), mb: 2 }} // ⬅️ ANTES: 100
+                      sx={{ fontSize: 80, color: alpha("#000", 0.2), mb: 2 }}
                     />
                   </Box>
                 )}
               </Paper>
 
-
-              {/* Botón de acción */}
               {!scanning ? (
                 <Button
                   fullWidth
@@ -571,6 +543,7 @@ export default function QRScanner() {
                   color="error"
                   onClick={stopScan}
                   startIcon={<Stop />}
+                  disabled={procesando}
                   sx={{
                     py: 1.8,
                     borderRadius: 2.5,
@@ -593,7 +566,6 @@ export default function QRScanner() {
         </Fade>
       </Container>
 
-      {/* Modal de éxito centrado */}
       <Snackbar
         open={showToast}
         autoHideDuration={3000}
@@ -645,12 +617,11 @@ export default function QRScanner() {
               textAlign: "center",
             }}
           >
-            ¡Registro Exitoso!
+            Registro Exitoso
           </Typography>
         </Box>
       </Snackbar>
 
-      {/* Modal de error centrado */}
       <Snackbar
         open={!!errorMsg}
         autoHideDuration={3000}

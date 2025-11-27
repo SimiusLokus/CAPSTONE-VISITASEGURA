@@ -1,4 +1,4 @@
-// CAPSTONE-VISITASEGURA\backend\servicios\seguridad\hash.js
+// ..\backend\servicios\seguridad\hash.js
 
 const crypto = require("crypto");
 
