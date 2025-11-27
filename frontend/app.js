@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect } from "react";
 import jsQR from "jsqr";
 import "bootstrap/dist/css/bootstrap.min.css";
+import HashClient from "./utils/hash_cliente"; 
 
 function App() {
   const videoRef = useRef(null);
@@ -8,7 +9,42 @@ function App() {
   const [stream, setStream] = useState(null);
   const [run, setRun] = useState("");
   const [serial, setSerial] = useState("");
+  
+  // Instanciar cliente de seguridad
+  const hashClient = new HashClient();
 
+  // Función para indexar y registrar - AHORA CON SEGURIDAD
+  const indexarYRegistrar = async (run, serial) => {
+    try {
+      // 1. Primero indexar con seguridad
+      const resultadoIndexacion = await hashClient.enviarSolicitudSegura(
+        '/api/indexacion/indexar',
+        { run, num_doc: serial }
+      );
+      
+      if (resultadoIndexacion.exito) {
+        // 2. Luego registrar con los datos indexados
+        await hashClient.enviarSolicitudSegura(
+          '/visitas',
+          resultadoIndexacion.registroIndexado
+        );
+
+        alert("Visita registrada: " + 
+          resultadoIndexacion.registroIndexado.nombres + " " + 
+          resultadoIndexacion.registroIndexado.apellidos);
+          
+      } else if (resultadoIndexacion.duplicado) {
+        alert("Esta persona ya está registrada");
+      } else {
+        alert("No se pudo completar el registro: " + resultadoIndexacion.mensaje);
+      }
+    } catch (error) {
+      console.error("Error en registro:", error);
+      alert("Error de seguridad o conexión: " + error.message);
+    }
+  };
+
+  // [El resto del código de scanning se mantiene igual...]
   const startScan = async () => {
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -62,15 +98,19 @@ function App() {
           try {
             const url = new URL(code.data);
             const params = new URLSearchParams(url.search);
-            setRun(params.get("RUN") || "");
-            setSerial(params.get("serial") || "");
-            console.log("RUN:", params.get("RUN") || "");
-            console.log("Serial:", params.get("serial") || "");
+            const runValue = params.get("RUN") || "";
+            const serialValue = params.get("serial") || "";
+            setRun(runValue);
+            setSerial(serialValue);
+
+            // Llamar a la función de indexación y registro después de escanear
+            indexarYRegistrar(runValue, serialValue);
+
           } catch (e) {
             alert("Error al procesar el QR");
           }
 
-          stop(); // Detenemos escaneo
+          stop();
           return;
         }
       }
@@ -83,8 +123,7 @@ function App() {
 
   return (
     <div className="container text-center mt-5">
-      <h1 className="mb-4">Lector QR</h1>
-
+      <h1 className="mb-4">Lector QR Seguro</h1>
       <div className="border rounded p-2 d-inline-block">
         <video
           ref={videoRef}
@@ -98,7 +137,7 @@ function App() {
       <div className="mt-3">
         {!scanning ? (
           <button className="btn btn-primary" onClick={startScan}>
-            Iniciar Escaneo
+            Iniciar Escaneo Seguro
           </button>
         ) : (
           <button className="btn btn-danger" onClick={stopScan}>

@@ -1,4 +1,5 @@
 // src/pages/QRScanner.jsx
+import Cifrado_cliente from '../services/cifrado_cliente';
 import React, { useRef, useState, useEffect, useCallback } from "react";
 import jsQR from "jsqr";
 import {
@@ -162,41 +163,93 @@ export default function QRScanner() {
                 tipo_evento: tipoEvento,
                 accion: accion,
               };
-              fetch(`${API_BASE_URL}/visitas`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload),
+
+              // NUEVO: Procesar con cifrado
+              const cifradoCliente = new Cifrado_cliente();
+              cifradoCliente.procesarQRDesdeBackend({
+                run: qrRun,
+                num_doc: qrSerial,
+                tipo_evento: tipoEvento,
+                accion: accion,
+                timestamp: Date.now()
               })
-                .then(async (res) => {
-                  if (!res.ok) {
-                    // intentamos leer el mensaje de error que venga del backend
-                    let data = {};
-                    try { data = await res.json(); } catch {}
-                    
-                    // Si el backend indica que el usuario ya existe
-                    if (data.error) throw new Error(data.error);
-                    
-                    // Si es conflicto 409
-                    if (res.status === 409) {
-                      if (accion === "entrada") throw new Error("Usuario ya ingresado");
-                      if (accion === "salida") throw new Error("El usuario ya ha salido");
+              .then(resultadoCifrado => {
+                const payloadFinal = { ...payload };
+                
+                if (resultadoCifrado.ok && resultadoCifrado.datosCifrados) {
+                  payloadFinal.datosCifrados = resultadoCifrado.datosCifrados;
+                }
+
+                fetch(`${API_BASE_URL}/visitas`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(payloadFinal),
+                })
+                  .then(async (res) => {
+                    if (!res.ok) {
+                      let data = {};
+                      try { data = await res.json(); } catch {}
+                      
+                      if (data.error) throw new Error(data.error);
+                      
+                      if (res.status === 409) {
+                        if (accion === "entrada") throw new Error("Usuario ya ingresado");
+                        if (accion === "salida") throw new Error("El usuario ya ha salido");
+                      }
+                      
+                      throw new Error(`HTTP ${res.status}`);
                     }
-                    
-                    throw new Error(`HTTP ${res.status}`);
-                  }
-                  return res.json();
+                    return res.json();
+                  })
+                  .then(() => {
+                    setShowToast(true);
+                  })
+                  .catch((err) => {
+                    setErrorMsg(err.message || "Error desconocido");
+                  })
+                  .finally(() => {
+                    stopScan();
+                  });
+              })
+              .catch(cifradoError => {
+                console.warn('Cifrado fallo, enviando sin cifrar:', cifradoError);
+                
+                fetch(`${API_BASE_URL}/visitas`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(payload),
                 })
-                .then(() => {
-                  setShowToast(true);
-                })
-                .catch((err) => {
-                  setErrorMsg(err.message || "Error desconocido");
-                });
+                  .then(async (res) => {
+                    if (!res.ok) {
+                      let data = {};
+                      try { data = await res.json(); } catch {}
+                      
+                      if (data.error) throw new Error(data.error);
+                      
+                      if (res.status === 409) {
+                        if (accion === "entrada") throw new Error("Usuario ya ingresado");
+                        if (accion === "salida") throw new Error("El usuario ya ha salido");
+                      }
+                      
+                      throw new Error(`HTTP ${res.status}`);
+                    }
+                    return res.json();
+                  })
+                  .then(() => {
+                    setShowToast(true);
+                  })
+                  .catch((err) => {
+                    setErrorMsg(err.message || "Error desconocido");
+                  })
+                  .finally(() => {
+                    stopScan();
+                  });
+              });
+
             } catch (e) {
               setErrorMsg(e.message || "Error al procesar QR");
+              stopScan();
             }
-
-            stopScan();
             return;
           }
         }
