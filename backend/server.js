@@ -44,6 +44,11 @@ function getLocalIP() {
   return "localhost";
 }
 const LOCAL_IP = getLocalIP();
+// fecha en formato chile
+function fechaChile() {
+  return new Intl.DateTimeFormat("es-CL", { timeZone: "America/Santiago" })
+    .format(new Date()); // dd/mm/aaaa
+}
 
 // Aplicar middleware de seguridad a todos los endpoints críticos
 app.use((req, res, next) => {
@@ -193,7 +198,8 @@ app.post("/visitas", async (req, res) => {
       if (!runFinal) return res.status(400).json({ ok: false, error: "Falta run" });
 
       const ahora = new Date();
-      const fecha = ahora.toISOString().split("T")[0];
+      const fecha = fechaChile();
+
       // nota: hora_entrada se calculará en el momento de insertar
       const hora_entrada = ahora.toTimeString().split(" ")[0];
 
@@ -369,7 +375,7 @@ app.post("/visitas", async (req, res) => {
       const query = "INSERT INTO visitas(run, nombres, apellidos, fecha_nac, sexo, num_doc, tipo_evento, fecha, hora_entrada, datos_cifrados) VALUES(?,?,?,?,?,?,?,?,?,?)";
 
       const ahora = new Date();
-      const fecha = ahora.toISOString().split("T")[0];
+      const fecha = fechaChile();
       const hora_entrada = ahora.toTimeString().split(" ")[0];
 
       db.run(
@@ -414,7 +420,7 @@ app.post("/visitas", async (req, res) => {
       const { nombres, apellidos, fecha_nac, sexo, tipo_evento = "Visita" } = req.body;
 
       const ahora = new Date();
-      const fecha = ahora.toISOString().split("T")[0];
+      const fecha = fechaChile();
       const hora_entrada = ahora.toTimeString().split(" ")[0];
 
       const query = "INSERT INTO visitas(run, nombres, apellidos, fecha_nac, sexo, num_doc, tipo_evento, fecha, hora_entrada, datos_cifrados) VALUES(?,?,?,?,?,?,?,?,?,?)";
@@ -464,7 +470,7 @@ app.post("/visitas", async (req, res) => {
 
       // Hora y fecha actuales
       const ahoraLocal = new Date();
-      const fechaLocal = ahoraLocal.toISOString().split("T")[0];
+      const fechaLocal = fechaChile();
       const horaEntradaLocal = ahoraLocal.toTimeString().split(" ")[0];
 
       // Verificar de nuevo si hay una entrada abierta (condición de seguridad)
@@ -535,24 +541,55 @@ app.post("/visitas", async (req, res) => {
 //     GET VISITAS
 // -----------------------
 app.get("/visitas", (req, res) => {
-  let sql = "SELECT * FROM visitas";
-  const params = [];
+  try {
+    let sql = "SELECT * FROM visitas";
+    const params = [];
 
-  if (req.query.fecha) {
-    sql += " WHERE fecha = ?";
-    params.push(req.query.fecha);
-  }
+    if (req.query.fecha) {
+      // 1) decodificar y limpiar el valor recibido
+      let raw = String(req.query.fecha || "").trim();
+      try { raw = decodeURIComponent(raw); } catch (e) {}
 
-  sql += " ORDER BY id DESC";
+      // 2) normalizar a dd/mm/yyyy
+      let fechaBuscada = null;
 
-  db.all(sql, params, (err, rows) => {
-    if (err) {
-      console.error("Error SELECT visitas:", err.message);
-      return res.status(500).json({ ok: false, error: "Error en BD" });
+      // ISO -> yyyy-mm-dd  -> dd/mm/yyyy
+      if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+        const [yyyy, mm, dd] = raw.split("-");
+        fechaBuscada = `${dd}-${mm}-${yyyy}`;
+      }
+      // ya viene dd/mm/yyyy
+      else if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
+        fechaBuscada = raw;
+      }
+      // viene con guiones dd-mm-yyyy -> convertir a dd/mm/yyyy
+      else if (/^\d{2}-\d{2}-\d{4}$/.test(raw)) {
+        fechaBuscada = raw.replace(/-/g, "/");
+      }
+      // si no matchea, devolver error claro
+      else {
+        return res.status(400).json({ ok: false, error: "Formato de fecha no válido. Use yyyy-mm-dd o dd/mm/yyyy." });
+      }
+
+      sql += " WHERE fecha = ?";
+      params.push(fechaBuscada);
     }
-    return res.json({ ok: true, data: rows });
-  });
+
+    sql += " ORDER BY id DESC";
+
+    db.all(sql, params, (err, rows) => {
+      if (err) {
+        console.error("Error SELECT visitas:", err.message);
+        return res.status(500).json({ ok: false, error: "Error en BD" });
+      }
+      return res.json({ ok: true, data: rows });
+    });
+  } catch (e) {
+    console.error("Error en GET /visitas:", e);
+    res.status(500).json({ ok: false, error: "Error interno" });
+  }
 });
+
 
 // -----------------------
 //        HTTPS + WS

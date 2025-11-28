@@ -46,24 +46,26 @@ function AdminPage() {
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [searchTerm, setSearchTerm] = useState("");
 
-  const fetchVisitas = async (fecha) => {
-    try {
-      const url = fecha 
-        ? `https://localhost:3001/visitas?fecha=${fecha}` 
-        : "https://localhost:3001/visitas";
-      
-      const response = await fetch(url);
-      if (!response.ok) throw new Error("Error en la respuesta del servidor");
-      
-      const data = await response.json();
-      const visitasMostradas = data.data || [];
-      setVisitas(visitasMostradas);
-      setTotalUsuarios(visitasMostradas.length);
-      setPersonasDentro(visitasMostradas.filter(v => !v.hora_salida).length);
-    } catch (error) {
-      console.error("Error al cargar visitas:", error);
-    }
-  };
+const fetchVisitas = async (fecha) => {
+  try {
+    const url = fecha 
+      ? `https://localhost:3001/visitas?fecha=${fecha}` 
+      : "https://localhost:3001/visitas";
+    
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("Error en la respuesta del servidor");
+    
+    const data = await response.json();
+    const visitasMostradas = data.data || [];
+    setVisitas(visitasMostradas);
+    setTotalUsuarios(visitasMostradas.length);
+    setPersonasDentro(visitasMostradas.filter(v => !v.hora_salida).length);
+  } catch (error) {
+    console.error("Error al cargar visitas:", error);
+  }
+};
+
+
 
   useEffect(() => {
     fetchVisitas(filtroFecha);
