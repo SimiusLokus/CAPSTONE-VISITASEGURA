@@ -153,94 +153,78 @@ export default function QRScanner() {
               setRun(qrRun);
               setSerial(qrSerial);
 
+              // MODIFICADO: payload ahora contiene timestamp
               const payload = {
                 run: qrRun,
                 num_doc: qrSerial,
                 tipo_evento: tipoEvento,
                 accion: accion,
+                timestamp: Date.now()
               };
 
-              // NUEVO: Procesar con cifrado
-              const cifradoCliente = new Cifrado_cliente();
-              cifradoCliente.procesarQRDesdeBackend({
-                run: qrRun,
-                num_doc: qrSerial,
-                tipo_evento: tipoEvento,
-                accion: accion,
-                timestamp: Date.now()
-              })
-              .then(resultadoCifrado => {
-                const payloadFinal = { ...payload };
-                
-                if (resultadoCifrado.ok && resultadoCifrado.datosCifrados) {
-                  payloadFinal.datosCifrados = resultadoCifrado.datosCifrados;
-                }
+              console.log("Iniciando cifrado de datos...");
 
-                fetch(`${API_BASE_URL}/visitas`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify(payloadFinal),
-                })
-                  .then(async (res) => {
-                    if (!res.ok) {
-                      let data = {};
-                      try { data = await res.json(); } catch {}
-                      
-                      if (data.error) throw new Error(data.error);
-                      
-                      if (res.status === 409) {
-                        if (accion === "entrada") throw new Error("Usuario ya ingresado");
-                        if (accion === "salida") throw new Error("El usuario ya ha salido");
-                      }
-                      
-                      throw new Error(`HTTP ${res.status}`);
-                    }
-                    return res.json();
-                  })
-                  .then(() => {
-                    setShowToast(true);
-                  })
-                  .catch((err) => {
-                    setErrorMsg(err.message || "Error desconocido");
-                  })
-                  .finally(() => {
+              // MODIFICADO: Procesar con cifrado
+              const cifradoCliente = new Cifrado_cliente();
+              cifradoCliente.procesarQRDesdeBackend(payload)
+                .then(resultadoCifrado => {
+                  
+                  // AGREGADO: Verificar si el cifrado fue exitoso
+                  if (!resultadoCifrado.ok || !resultadoCifrado.datosCifrados) {
+                    console.warn("Cifrado fallo, abortando envio");
+                    setErrorMsg("Error: No se pudo cifrar la informacion");
                     stopScan();
-                  });
-              })
-              .catch(cifradoError => {
-                console.warn('Cifrado fallo, enviando sin cifrar:', cifradoError);
-                
-                fetch(`${API_BASE_URL}/visitas`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify(payload),
-                })
-                  .then(async (res) => {
-                    if (!res.ok) {
-                      let data = {};
-                      try { data = await res.json(); } catch {}
-                      
-                      if (data.error) throw new Error(data.error);
-                      
-                      if (res.status === 409) {
-                        if (accion === "entrada") throw new Error("Usuario ya ingresado");
-                        if (accion === "salida") throw new Error("El usuario ya ha salido");
+                    return;
+                  }
+
+                  console.log("Datos cifrados correctamente");
+
+                  // MODIFICADO: Enviar SOLO datos cifrados
+                  const payloadSeguro = {
+                    datosCifrados: resultadoCifrado.datosCifrados,
+                    accion: accion,
+                    tipo_evento: tipoEvento
+                  };
+
+                  fetch(`${API_BASE_URL}/visitas`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payloadSeguro),
+                  })
+                    .then(async (res) => {
+                      if (!res.ok) {
+                        let data = {};
+                        try { data = await res.json(); } catch {}
+                        
+                        if (data.error) throw new Error(data.error);
+                        
+                        if (res.status === 409) {
+                          if (accion === "entrada") throw new Error("Usuario ya ingresado");
+                          if (accion === "salida") throw new Error("El usuario ya ha salido");
+                        }
+                        
+                        throw new Error(`HTTP ${res.status}`);
                       }
-                      
-                      throw new Error(`HTTP ${res.status}`);
-                    }
-                    return res.json();
-                  })
-                  .then(() => {
-                    setShowToast(true);
-                  })
-                  .catch((err) => {
-                    setErrorMsg(err.message || "Error desconocido");
-                  })
-                  .finally(() => {
-                    stopScan();
-                  });
-              });
+                      return res.json();
+                    })
+                    .then((respuesta) => {
+                      console.log("Registro guardado:", respuesta);
+                      setShowToast(true);
+                    })
+                    .catch((err) => {
+                      console.error("Error en registro:", err);
+                      setErrorMsg(err.message || "Error desconocido");
+                    })
+                    .finally(() => {
+                      stopScan();
+                    });
+                })
+                .catch(cifradoError => {
+                  // MODIFICADO: NO enviar sin cifrar - mostrar error
+                  console.error('Error critico en cifrado:', cifradoError);
+                  setErrorMsg("Error: No se pudo cifrar la informacion");
+                  stopScan();
+                });
 
             } catch (e) {
               setErrorMsg(e.message || "Error al procesar QR");
@@ -292,7 +276,6 @@ export default function QRScanner() {
               border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
             }}
           >
-            {/* Header con gradiente */}
           <Box
             sx={{
               background: `linear-gradient(
@@ -312,7 +295,7 @@ export default function QRScanner() {
                 width: 200,
                 height: 200,
                 borderRadius: "50%",
-                background: alpha("#fff", 0.05), // ⭐ suave para no opacar el negro
+                background: alpha("#fff", 0.05),
               },
             }}
           >
@@ -332,18 +315,12 @@ export default function QRScanner() {
                       color: "white",
                       fontWeight: 800,
                       letterSpacing: "-0.5px",
-
-                      // ✔ hace que se adapte
                       flexGrow: 1,
                       flexShrink: 1,
-                      minWidth: 0, // Necesario para que text-overflow funcione
-
-                      // ✔ controla el ajuste del texto
+                      minWidth: 0,
                       whiteSpace: "nowrap",
                       overflow: "hidden",
                       textOverflow: "ellipsis",
-
-                      // ✔ tamaño responsivo
                       fontSize: {
                         xs: "1.4rem",
                         sm: "1.8rem",
@@ -359,9 +336,7 @@ export default function QRScanner() {
               </Stack>
             </Box>
 
-            {/* Contenido principal */}
             <Box sx={{ p: 3 }}>
-              {/* Toggle Entrada/Salida */}
               <Box sx={{ mb: 3 }}>
                 <ToggleButtonGroup
                   value={accion}
@@ -394,7 +369,6 @@ export default function QRScanner() {
                 </ToggleButtonGroup>
               </Box>
 
-              {/* Tipo de evento */}
               {accion === "entrada" && (
                 <Grow in timeout={500}>
                   <FormControl fullWidth sx={{ mb: 3 }}>
@@ -417,22 +391,21 @@ export default function QRScanner() {
                         },
                       }}
                     >
-                      <MenuItem value="Visita">🏛️ Visita</MenuItem>
-                      <MenuItem value="Graduacion">🎓 Graduación</MenuItem>
-                      <MenuItem value="Recorrido guiado">🚶 Recorrido guiado</MenuItem>
-                      <MenuItem value="Otro">📋 Otro</MenuItem>
+                      <MenuItem value="Visita">Visita</MenuItem>
+                      <MenuItem value="Graduacion">Graduacion</MenuItem>
+                      <MenuItem value="Recorrido guiado">Recorrido guiado</MenuItem>
+                      <MenuItem value="Otro">Otro</MenuItem>
                     </Select>
                   </FormControl>
                 </Grow>
               )}
 
-              {/* Video/QR Scanner */}
               <Paper
                 elevation={8}
                 sx={{
                   position: "relative",
                   width: "100%",
-                  height: 280, // ⬅️ ANTES: 320 (más compacto)
+                  height: 280,
                   mb: 3,
                   borderRadius: 3,
                   overflow: "hidden",
@@ -471,8 +444,8 @@ export default function QRScanner() {
                     >
                       <Box
                         sx={{
-                          width: 200,     // ⬅️ ANTES: 250
-                          height: 200,    // ⬅️ ANTES: 250
+                          width: 200,
+                          height: 200,
                           border: `4px solid ${theme.palette.primary.main}`,
                           borderRadius: 3,
                           position: "relative",
@@ -480,7 +453,7 @@ export default function QRScanner() {
                           "&::before, &::after": {
                             content: '""',
                             position: "absolute",
-                            width: 25,   // ⬅️ Antes: 30 (ligeramente más pequeño)
+                            width: 25,
                             height: 25,
                             borderColor: theme.palette.primary.main,
                             borderStyle: "solid",
@@ -505,7 +478,7 @@ export default function QRScanner() {
                         sx={{
                           mt: 3,
                           fontWeight: 700,
-                          fontSize: "0.90rem", // opcional: un pelito más pequeño
+                          fontSize: "0.90rem",
                           px: 2,
                         }}
                       />
@@ -527,14 +500,12 @@ export default function QRScanner() {
                     }}
                   >
                     <QrCodeScanner
-                      sx={{ fontSize: 80, color: alpha("#000", 0.2), mb: 2 }} // ⬅️ ANTES: 100
+                      sx={{ fontSize: 80, color: alpha("#000", 0.2), mb: 2 }}
                     />
                   </Box>
                 )}
               </Paper>
 
-
-              {/* Botón de acción */}
               {!scanning ? (
                 <Button
                   fullWidth
@@ -589,7 +560,6 @@ export default function QRScanner() {
         </Fade>
       </Container>
 
-      {/* Modal de éxito centrado */}
       <Snackbar
         open={showToast}
         autoHideDuration={3000}
@@ -641,12 +611,11 @@ export default function QRScanner() {
               textAlign: "center",
             }}
           >
-            ¡Registro Exitoso!
+            Registro Exitoso
           </Typography>
         </Box>
       </Snackbar>
 
-      {/* Modal de error centrado */}
       <Snackbar
         open={!!errorMsg}
         autoHideDuration={3000}
