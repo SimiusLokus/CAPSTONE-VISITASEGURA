@@ -50,20 +50,40 @@ function fechaChile() {
     .format(new Date()); // dd/mm/aaaa
 }
 
-// Aplicar middleware de seguridad a todos los endpoints críticos
+//middleware de seguridad a todos los endpoints críticos
+
 app.use((req, res, next) => {
   const publicEndpoints = [
     '/login', 
     '/info', 
     '/api/cifrado/status',
-    '/api/cifrado/procesar-qr',
-    '/visitas'
+    '/api/cifrado/procesar-qr'
+  ];
+
+  const conditionalEndpoints = [
+    '/visitas'  // GET es público, POST necesita seguridad
   ];
 
   if (publicEndpoints.includes(req.path)) {
-    return next(); // Saltar seguridad para endpoints públicos
+    return next();
   }
-  servicioHash.middlewareProteccion()(req, res, next);
+
+  if (conditionalEndpoints.includes(req.path)) {
+    if (req.method === 'GET') {
+      return next();
+    }
+    if (req.method === 'POST') {
+      console.log('[SECURITY] Validando seguridad para POST /visitas');
+      console.log('[SECURITY DEBUG] Body disponible:', Object.keys(req.body || {}));
+      return servicioHash.middlewareProteccion()(req, res, next);
+    }
+  }
+
+  if (['POST', 'PUT', 'DELETE'].includes(req.method)) {
+    return servicioHash.middlewareProteccion()(req, res, next);
+  }
+
+  next();
 });
 
 app.use(cors({
