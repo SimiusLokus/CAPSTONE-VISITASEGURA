@@ -44,48 +44,18 @@ function getLocalIP() {
   return "localhost";
 }
 const LOCAL_IP = getLocalIP();
+
 // fecha en formato chile
 function fechaChile() {
   return new Intl.DateTimeFormat("es-CL", { timeZone: "America/Santiago" })
     .format(new Date()); // dd/mm/aaaa
 }
 
-//middleware de seguridad a todos los endpoints críticos
+// ============================================================
+// ✅ ORDEN CORRECTO DE MIDDLEWARES - CRÍTICO!
+// ============================================================
 
-app.use((req, res, next) => {
-  const publicEndpoints = [
-    '/login', 
-    '/info', 
-    '/api/cifrado/status',
-    '/api/cifrado/procesar-qr'
-  ];
-
-  const conditionalEndpoints = [
-    '/visitas'  // GET es público, POST necesita seguridad
-  ];
-
-  if (publicEndpoints.includes(req.path)) {
-    return next();
-  }
-
-  if (conditionalEndpoints.includes(req.path)) {
-    if (req.method === 'GET') {
-      return next();
-    }
-    if (req.method === 'POST') {
-      console.log('[SECURITY] Validando seguridad para POST /visitas');
-      console.log('[SECURITY DEBUG] Body disponible:', Object.keys(req.body || {}));
-      return servicioHash.middlewareProteccion()(req, res, next);
-    }
-  }
-
-  if (['POST', 'PUT', 'DELETE'].includes(req.method)) {
-    return servicioHash.middlewareProteccion()(req, res, next);
-  }
-
-  next();
-});
-
+// 1️⃣ PRIMERO: CORS (permite que las peticiones lleguen)
 app.use(cors({
   origin: [
     'http://localhost:3000',
@@ -98,17 +68,63 @@ app.use(cors({
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-hash-seguridad', 'x-timestamp', 'x-nonce']
 }));
 
+// 2️⃣ SEGUNDO: Parsear JSON (ANTES del middleware de seguridad)
 app.use(express.json());
+
+// 3️⃣ TERCERO: Archivos estáticos
 app.use(express.static(path.join(__dirname, "../frontend")));
 
-// Servicios
+// 4️⃣ CUARTO: Rutas públicas (sin seguridad)
 app.use("/api/cifrado", cifradoRouter);
 app.use("/api/indexacion", indexacionRouter);
 
-// Base de datos SQLite
+// 5️⃣ QUINTO: AHORA SÍ - Middleware de seguridad
+app.use((req, res, next) => {
+  const publicEndpoints = [
+    '/login', 
+    '/info', 
+    '/api/cifrado/status',
+    '/api/cifrado/procesar-qr'
+  ];
+
+  const conditionalEndpoints = [
+    '/visitas'  // GET es público, POST necesita seguridad
+  ];
+
+  // Permitir endpoints públicos
+  if (publicEndpoints.includes(req.path)) {
+    return next();
+  }
+
+  // Endpoints condicionales (según método HTTP)
+  if (conditionalEndpoints.includes(req.path)) {
+    if (req.method === 'GET') {
+      return next();
+    }
+    if (req.method === 'POST') {
+      console.log('[SECURITY] Validando seguridad para POST /visitas');
+      console.log('[SECURITY DEBUG] Body disponible:', Object.keys(req.body || {}));
+      console.log('[SECURITY DEBUG] Body completo:', req.body); // ✅ AGREGADO
+      return servicioHash.middlewareProteccion()(req, res, next);
+    }
+  }
+
+  // Proteger otros endpoints POST/PUT/DELETE
+  if (['POST', 'PUT', 'DELETE'].includes(req.method)) {
+    console.log(`[SECURITY] Validando seguridad para: ${req.method} ${req.path}`);
+    return servicioHash.middlewareProteccion()(req, res, next);
+  }
+
+  next();
+});
+
+// ============================================================
+// BASE DE DATOS SQLITE
+// ============================================================
+
 const db = new sqlite3.Database(
   path.join(__dirname, "../data/registros.db"),
   (err) => {
@@ -149,7 +165,11 @@ db.run(`
  )
 `);
 
-// Endpoint para obtener info del servidor (nuevo)
+// ============================================================
+// ENDPOINTS
+// ============================================================
+
+// Endpoint para obtener info del servidor
 app.get("/info", (req, res) => {
   res.json({ 
     message: "Servidor funcionando", 
@@ -179,6 +199,8 @@ app.post("/login", (req, res) => {
 // -----------------------
 app.post("/visitas", async (req, res) => {
   try {
+    console.log('[VISITAS] POST recibido con body:', req.body); // ✅ DEBUG
+    
     const { accion, run, num_doc, datosCifrados } = req.body;
 
     // Procesar datos cifrados si vienen
