@@ -1,5 +1,6 @@
-// src/pages/QRScanner.jsx
+// src/pages/QRScanner.jsx - VERSIÓN CORREGIDA
 import Cifrado_cliente from '../utils/cifrado_cliente';
+import Hash_cliente from '../utils/hash_cliente'; 
 import React, { useRef, useState, useEffect, useCallback } from "react";
 import jsQR from "jsqr";
 import {
@@ -62,6 +63,9 @@ export default function QRScanner() {
 
   const [flip, setFlip] = useState(false);
   const [ticksSinQR, setTicksSinQR] = useState(0);
+
+  //Instanciar cliente de seguridad
+  const hashCliente = useRef(new Hash_cliente()).current;
 
   const stopScan = useCallback(() => {
     if (stream) {
@@ -153,7 +157,6 @@ export default function QRScanner() {
               setRun(qrRun);
               setSerial(qrSerial);
 
-              // MODIFICADO: payload ahora contiene timestamp
               const payload = {
                 run: qrRun,
                 num_doc: qrSerial,
@@ -164,32 +167,50 @@ export default function QRScanner() {
 
               console.log("Iniciando cifrado de datos...");
 
-              // MODIFICADO: Procesar con cifrado
               const cifradoCliente = new Cifrado_cliente();
               cifradoCliente.procesarQRDesdeBackend(payload)
                 .then(resultadoCifrado => {
                   
-                  // AGREGADO: Verificar si el cifrado fue exitoso
                   if (!resultadoCifrado.ok || !resultadoCifrado.datosCifrados) {
-                    console.warn("Cifrado fallo, abortando envio");
-                    setErrorMsg("Error: No se pudo cifrar la informacion");
+                    console.warn("Cifrado falló, abortando envío");
+                    setErrorMsg("Error: No se pudo cifrar la información");
                     stopScan();
                     return;
                   }
 
                   console.log("Datos cifrados correctamente");
 
-                  // MODIFICADO: Enviar SOLO datos cifrados
-                  const payloadSeguro = {
+                  //Preparar payload con datos cifrados
+                  const payloadParaEnviar = {
                     datosCifrados: resultadoCifrado.datosCifrados,
                     accion: accion,
                     tipo_evento: tipoEvento
                   };
 
+                  //Usar Hash_cliente para generar headers de seguridad
+                  console.log("Generando hash de seguridad...");
+                  const hashData = hashCliente.generarHashFrontend(payloadParaEnviar);
+                  
+                  console.log("Hash generado:", {
+                    timestamp: hashData.timestamp,
+                    nonce: hashData.nonce.substring(0, 10) + "...",
+                    hash: hashData.hash.substring(0, 20) + "..."
+                  });
+
+                  //Enviar con headers de seguridad
                   fetch(`${API_BASE_URL}/visitas`, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(payloadSeguro),
+                    headers: { 
+                      "Content-Type": "application/json",
+                      "x-hash-seguridad": hashData.hash,       
+                      "x-timestamp": hashData.timestamp.toString(), 
+                      "x-nonce": hashData.nonce                  
+                    },
+                    body: JSON.stringify({
+                      ...payloadParaEnviar,
+                      timestamp: hashData.timestamp, 
+                      nonce: hashData.nonce       
+                    }),
                   })
                     .then(async (res) => {
                       if (!res.ok) {
@@ -201,6 +222,10 @@ export default function QRScanner() {
                         if (res.status === 409) {
                           if (accion === "entrada") throw new Error("Usuario ya ingresado");
                           if (accion === "salida") throw new Error("El usuario ya ha salido");
+                        }
+                        
+                        if (res.status === 401) {
+                          throw new Error("Error de seguridad - solicitud rechazada");
                         }
                         
                         throw new Error(`HTTP ${res.status}`);
@@ -220,9 +245,8 @@ export default function QRScanner() {
                     });
                 })
                 .catch(cifradoError => {
-                  // MODIFICADO: NO enviar sin cifrar - mostrar error
-                  console.error('Error critico en cifrado:', cifradoError);
-                  setErrorMsg("Error: No se pudo cifrar la informacion");
+                  console.error('Error crítico en cifrado:', cifradoError);
+                  setErrorMsg("Error: No se pudo cifrar la información");
                   stopScan();
                 });
 
@@ -240,7 +264,7 @@ export default function QRScanner() {
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [scanning, tipoEvento, accion, stopScan]);
+  }, [scanning, tipoEvento, accion, stopScan, hashCliente]);
 
   return (
       <Box
